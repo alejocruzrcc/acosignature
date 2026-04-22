@@ -1,5 +1,5 @@
 from accounts.models import User
-from documents.models import Document
+from documents.models import Document, DocumentSignatory
 
 from .models import AuditEvent
 
@@ -21,6 +21,30 @@ class WorkflowService:
             raise ValueError('Rol sin permisos para firmar.')
         if document.status in {Document.Status.APPROVED, Document.Status.REJECTED}:
             raise ValueError('Documento en estado final, no se puede firmar.')
+
+        signatories = list(document.signatories.all())
+        if signatories:
+            updated = DocumentSignatory.objects.filter(document=document, user=actor, status=DocumentSignatory.Status.PENDING).update(
+                status=DocumentSignatory.Status.SIGNED
+            )
+            if updated == 0 and not document.signatories.filter(user=actor).exists():
+                raise ValueError('No eres firmante asignado para este documento.')
+
+            pending = DocumentSignatory.objects.filter(document=document, status=DocumentSignatory.Status.PENDING).exists()
+            new_status = Document.Status.PENDING if pending else Document.Status.APPROVED
+            if document.status != new_status:
+                document.status = new_status
+                document.save(update_fields=['status', 'updated_at'])
+
+            WorkflowService._log_event(
+                action=AuditEvent.Actions.SIGN,
+                actor=actor,
+                document=document,
+                ip_address=ip_address,
+                metadata={'new_status': document.status, 'multi_signatory': True},
+            )
+            return
+
         document.status = Document.Status.SIGNED
         document.save(update_fields=['status', 'updated_at'])
         WorkflowService._log_event(
@@ -28,7 +52,7 @@ class WorkflowService:
             actor=actor,
             document=document,
             ip_address=ip_address,
-            metadata={'new_status': Document.Status.SIGNED},
+            metadata={'new_status': Document.Status.SIGNED, 'multi_signatory': False},
         )
 
     @staticmethod

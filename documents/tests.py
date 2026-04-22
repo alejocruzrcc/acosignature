@@ -3,7 +3,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from documents.models import Document
+from documents.models import Document, DocumentSignatory
 from signatures.models import Signature
 
 User = get_user_model()
@@ -13,6 +13,7 @@ class DocumentFlowTests(APITestCase):
     def setUp(self):
         self.client_user = User.objects.create_user(username='cliente', password='Pass12345!', role='client')
         self.reviewer_user = User.objects.create_user(username='reviewer', password='Pass12345!', role='reviewer')
+        self.other_user = User.objects.create_user(username='firmante2', password='Pass12345!', role='client')
 
     def authenticate(self, username, password):
         token = self.client.post('/api/auth/login/', {'username': username, 'password': password}, format='json')
@@ -59,4 +60,26 @@ class DocumentFlowTests(APITestCase):
         response = self.client.post(f'/api/documents/{doc.id}/approve/')
         doc.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(doc.status, Document.Status.APPROVED)
+
+    def test_multi_signatory_requires_all_signatures(self):
+        doc = Document.objects.create(
+            title='Doc',
+            description='Desc',
+            file=SimpleUploadedFile('m.pdf', b'%PDF', content_type='application/pdf'),
+            uploaded_by=self.client_user,
+        )
+        DocumentSignatory.objects.create(document=doc, user=self.client_user, status=DocumentSignatory.Status.PENDING)
+        DocumentSignatory.objects.create(document=doc, user=self.other_user, status=DocumentSignatory.Status.PENDING)
+
+        self.authenticate('cliente', 'Pass12345!')
+        r1 = self.client.post('/api/signatures/sign/', {'document': doc.id, 'signature_data': 'sig1'}, format='json')
+        doc.refresh_from_db()
+        self.assertEqual(r1.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(doc.status, Document.Status.PENDING)
+
+        self.authenticate('firmante2', 'Pass12345!')
+        r2 = self.client.post('/api/signatures/sign/', {'document': doc.id, 'signature_data': 'sig2'}, format='json')
+        doc.refresh_from_db()
+        self.assertEqual(r2.status_code, status.HTTP_201_CREATED)
         self.assertEqual(doc.status, Document.Status.APPROVED)

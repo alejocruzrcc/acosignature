@@ -1,0 +1,26 @@
+{% extends "base_portal.html" %}
+{% block title %}Confirmar · {{ document.title }}{% endblock %}
+{% block content %}
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div>
+      <div class="h2">Paso 3 de 3</div>
+      <h1 class="h1">Confirmación</h1>
+      <p style="margin:0;color:var(--muted);line-height:1.6">
+        Revisa tu firma. Al finalizar, quedará registrada y se actualizará el estado del documento.
+      </p>
+    </div>
+    <a class="btn btn-ghost" href="{% url 'portal_sign_flow_sign' document.id %}">Atrás</a>
+  </div>
+
+  <section class="card" style="margin-top:14px">
+    <div class="h2">Tu firma</div>
+    <div style="border:1px solid var(--line);border-radius:16px;padding:12px;background:#fff">
+      <img alt="Firma" src="{{ signature_preview }}" style="max-width:100%;height:auto" />
+    </div>
+
+    <form method="post" style="margin-top:12px">
+      {% csrf_token %}
+      <button class="btn btn-primary btn-block" type="submit">Finalizar</button>
+    </form>
+  </section>
+{% endblock %}

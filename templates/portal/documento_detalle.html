@@ -1,0 +1,99 @@
+{% extends "base_portal.html" %}
+{% block title %}{{ document.title }} · Constructora Indico{% endblock %}
+{% block content %}
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div>
+      <div class="h2">Documento</div>
+      <h1 class="h1">{{ document.title }}</h1>
+      <p style="margin:0;color:var(--muted);line-height:1.6">
+        Creado por <strong>{{ document.uploaded_by.username }}</strong> · {{ document.created_at|date:"Y-m-d H:i" }}
+      </p>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Volver</a>
+      {% if my_signatory and my_signatory.status == "pending" %}
+        <a class="btn btn-primary" href="{% url 'portal_approve_entry' document.id %}">Aprobar</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <section class="grid grid-2" style="margin-top:14px">
+    <div class="card">
+      <div class="h2">Datos</div>
+      <div class="field">
+        <label>Estado</label>
+        <div>
+          {% if document.status == "approved" %}
+            <span class="pill pill-signed">Aprobado</span>
+          {% elif document.status == "pending" %}
+            <span class="pill pill-pending">Pendiente</span>
+          {% else %}
+            <span class="pill">{{ document.get_status_display }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="field">
+        <label>Descripción</label>
+        <div style="white-space:pre-wrap;line-height:1.6">{{ document.description|default:"—" }}</div>
+      </div>
+      <div class="field">
+        <label>Requiere firma</label>
+        <div>{{ document.requires_signature|yesno:"Sí,No" }}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h2">Firmas</div>
+      <p style="margin:0 0 10px;color:var(--muted);line-height:1.6">
+        Progreso de firmantes asignados vs firmas registradas.
+      </p>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Firmante</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in document.signatories.all %}
+            <tr>
+              <td style="font-weight:800">{{ s.user.username }}</td>
+              <td>
+                {% if s.status == "signed" %}
+                  <span class="pill pill-signed">Firmado</span>
+                {% else %}
+                  <span class="pill pill-pending">Pendiente</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2" style="color:var(--muted)">No hay firmantes asignados.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div style="height:12px"></div>
+
+      <div class="h2">Registro</div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Fecha</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sig in document.signatures.all %}
+            <tr>
+              <td style="font-weight:800">{{ sig.user.username }}</td>
+              <td style="color:var(--muted)">{{ sig.signed_at|date:"Y-m-d H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2" style="color:var(--muted)">Aún no hay firmas registradas.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

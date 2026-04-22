@@ -84,6 +84,22 @@ Si ves errores tipo `admin/css/base.css could not be found` con storage “Manif
 4. Firmar documento.
 5. Consultar estado.
 
+## Portal web (Constructora Indico)
+
+Rutas principales:
+
+- `/` home + acceso
+- `/login/` login de Django (redirige a `/aprobaciones/`)
+- `/aprobaciones/` bandeja
+- `/aprobaciones/nuevo/` alta con selección de firmantes
+- `/aprobaciones/<id>/` detalle con progreso
+- `/aprobaciones/<id>/firmar/` flujo por pasos (revisión → firma → finalizar)
+
+Notas:
+
+- Si un documento tiene `DocumentSignatory`, el estado pasa a `approved` cuando **todos** firman.
+- Si no hay firmantes asignados, el flujo antiguo por API mantiene `signed` al firmar.
+
 ## Tests
 
 ```bash

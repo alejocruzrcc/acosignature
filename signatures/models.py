@@ -12,4 +12,5 @@ class Signature(models.Model):
 
     class Meta:
         ordering = ('-signed_at',)
-        unique_together = ('document', 'user')
+        verbose_name = 'Firma'
+        verbose_name_plural = 'Firmas'

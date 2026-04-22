@@ -1,0 +1,32 @@
+{% extends "base_portal.html" %}
+{% block title %}Ingresar · Constructora Indico{% endblock %}
+{% block content %}
+  <section class="card" style="max-width:520px;margin:0 auto">
+    <div class="h2">Acceso</div>
+    <h1 class="h1">Iniciar sesión</h1>
+
+    {% if form.errors %}
+      <div class="message" style="border-left-color:#ef4444;background:#fff5f5">
+        Usuario o contraseña incorrectos.
+      </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'login' %}">
+      {% csrf_token %}
+      <div class="field">
+        <label for="id_username">Usuario</label>
+        <input id="id_username" name="username" autocomplete="username" required />
+      </div>
+      <div class="field">
+        <label for="id_password">Contraseña</label>
+        <input id="id_password" name="password" type="password" autocomplete="current-password" required />
+      </div>
+      <input type="hidden" name="next" value="{{ next|default:'/aprobaciones/' }}" />
+      <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+    </form>
+
+    <p class="footer-note">
+      Si aún no tienes usuario, créalo desde el admin o el endpoint de registro de la API.
+    </p>
+  </section>
+{% endblock %}

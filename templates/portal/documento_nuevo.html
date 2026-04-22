@@ -1,0 +1,113 @@
+{% extends "base_portal.html" %}
+{% block title %}Nuevo documento · Constructora Indico{% endblock %}
+
+{% block extra_head %}
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <style>
+    /* Ajustes visuales para integrar Select2 con el UI del portal */
+    .select2-container--default .select2-selection--multiple{
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      min-height: 48px;
+      padding: 6px 8px;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice{
+      border-radius: 999px;
+      border: 1px solid #ffe1b3;
+      background: #fff7e8;
+      color: #333;
+      font-weight: 700;
+    }
+    .select2-dropdown{
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div>
+      <div class="h2">Alta</div>
+      <h1 class="h1">Nuevo documento</h1>
+      <p style="margin:0;color:var(--muted);max-width:760px;line-height:1.6">
+        Sube un PDF y selecciona uno o varios firmantes. El documento quedará en estado pendiente hasta que todos firmen.
+      </p>
+    </div>
+    <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Volver</a>
+  </div>
+
+  <section class="card" style="margin-top:14px">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <div class="field">
+        <label for="id_title">Título</label>
+        {{ form.title }}
+        {{ form.title.errors }}
+      </div>
+
+      <div class="field">
+        <label for="id_description">Descripción</label>
+        {{ form.description }}
+        {{ form.description.errors }}
+      </div>
+
+      <div class="field">
+        <label for="id_file">PDF</label>
+        {{ form.file }}
+        <div class="help">Solo PDF. Máximo 10MB.</div>
+        {{ form.file.errors }}
+      </div>
+
+      <div class="field">
+        <label for="id_requires_signature">Requiere firma</label>
+        {{ form.requires_signature }}
+        {{ form.requires_signature.errors }}
+      </div>
+
+      <div class="field">
+        <label for="id_firmantes">Firmantes</label>
+        {{ form.firmantes }}
+        <div class="help">Escribe para buscar por nombre y apellido. Puedes seleccionar varios firmantes.</div>
+        {{ form.firmantes.errors }}
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="message" style="border-left-color:#ef4444;background:#fff5f5">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <button class="btn btn-primary btn-block" type="submit">Enviar</button>
+    </form>
+  </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/i18n/es.js"></script>
+  <script>
+    (function () {
+      const $el = $('.js-select2-users');
+      if (!$el.length) return;
+
+      $el.select2({
+        width: '100%',
+        closeOnSelect: false,
+        placeholder: $el.data('placeholder') || 'Buscar y seleccionar firmantes…',
+        language: 'es',
+        matcher: function (params, data) {
+          // Búsqueda “contiene” case-insensitive sobre el texto visible (nombre completo)
+          if ($.trim(params.term) === '') return data;
+          if (typeof data.text === 'undefined') return null;
+          const term = params.term.toLowerCase();
+          const text = (data.text || '').toLowerCase();
+          return text.indexOf(term) > -1 ? data : null;
+        }
+      });
+    })();
+  </script>
+{% endblock %}

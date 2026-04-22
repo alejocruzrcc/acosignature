@@ -1,0 +1,100 @@
+{% extends "base_portal.html" %}
+{% block title %}Firma · {{ document.title }}{% endblock %}
+{% block content %}
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div>
+      <div class="h2">Paso 2 de 3</div>
+      <h1 class="h1">Captura tu firma</h1>
+      <p style="margin:0;color:var(--muted);line-height:1.6">
+        Dibuja en el recuadro con el dedo o el mouse. Luego continúa a confirmación.
+      </p>
+    </div>
+    <a class="btn btn-ghost" href="{% url 'portal_sign_flow_review' document.id %}">Atrás</a>
+  </div>
+
+  <section class="card" style="margin-top:14px">
+    <div style="border:1px dashed var(--brand);border-radius:16px;padding:12px;background:#fffaf2">
+      <canvas id="sig-canvas" style="width:100%;height:240px;border-radius:14px;border:1px solid var(--line);touch-action:none;background:#fff"></canvas>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" type="button" id="sig-clear">Limpiar</button>
+      </div>
+    </div>
+
+    <form method="post" style="margin-top:12px" id="sig-form">
+      {% csrf_token %}
+      <input type="hidden" name="signature_data" id="signature_data" value="" />
+      <button class="btn btn-primary btn-block" type="submit" id="sig-next" disabled>Siguiente</button>
+      <p class="footer-note">La firma se guarda como imagen (data URL) en base64.</p>
+    </form>
+  </section>
+
+  <script>
+    (function () {
+      const canvas = document.getElementById('sig-canvas');
+      const ctx = canvas.getContext('2d');
+      const hidden = document.getElementById('signature_data');
+      const btnNext = document.getElementById('sig-next');
+      const btnClear = document.getElementById('sig-clear');
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        canvas.width = Math.floor(rect.width * dpr);
+        canvas.height = Math.floor(rect.height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#333333';
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      let drawing = false;
+      let hasInk = false;
+
+      function pos(evt) {
+        const r = canvas.getBoundingClientRect();
+        return { x: evt.clientX - r.left, y: evt.clientY - r.top };
+      }
+
+      function start(evt) {
+        drawing = true;
+        const p = pos(evt);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+      }
+      function move(evt) {
+        if (!drawing) return;
+        const p = pos(evt);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        hasInk = true;
+        hidden.value = canvas.toDataURL('image/png');
+        btnNext.disabled = false;
+      }
+      function end() {
+        drawing = false;
+      }
+
+      canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); start(e); });
+      canvas.addEventListener('pointermove', move);
+      canvas.addEventListener('pointerup', end);
+      canvas.addEventListener('pointercancel', end);
+
+      btnClear.addEventListener('click', () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        hidden.value = '';
+        hasInk = false;
+        btnNext.disabled = true;
+        resize();
+      });
+
+      document.getElementById('sig-form').addEventListener('submit', (e) => {
+        if (!hidden.value) {
+          e.preventDefault();
+        }
+      });
+    })();
+  </script>
+{% endblock %}

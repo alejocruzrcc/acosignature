@@ -1,0 +1,37 @@
+/* Fixes for Django Admin nav sidebar layout (esp. narrow widths / odd wrapping) */
+
+#nav-sidebar {
+  min-width: 280px;
+  max-width: 360px;
+}
+
+#nav-sidebar .module {
+  overflow-x: hidden;
+}
+
+#nav-sidebar .module table {
+  width: 100% !important;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+#nav-sidebar .module th,
+#nav-sidebar .module td {
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+  white-space: normal !important;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+#nav-sidebar .module th {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+/* Some themes/browsers can end up with sticky header columns looking "vertical" when squeezed */
+#nav-sidebar caption,
+#nav-sidebar thead th {
+  transform: none !important;
+}

@@ -1,0 +1,34 @@
+{% extends "base_portal.html" %}
+{% block title %}Revisión · {{ document.title }}{% endblock %}
+{% block content %}
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div>
+      <div class="h2">Paso 1 de 3</div>
+      <h1 class="h1">Revisión del documento</h1>
+      <p style="margin:0;color:var(--muted);line-height:1.6">
+        Verifica la información y el PDF. Luego continúa para capturar tu firma.
+      </p>
+    </div>
+    <a class="btn btn-ghost" href="{% url 'portal_document_detail' document.id %}">Cancelar</a>
+  </div>
+
+  <section class="grid grid-2" style="margin-top:14px">
+    <div class="card">
+      <div class="h2">Resumen</div>
+      <div class="field"><label>Título</label><div style="font-weight:900">{{ document.title }}</div></div>
+      <div class="field"><label>Descripción</label><div style="white-space:pre-wrap;line-height:1.6">{{ document.description|default:"—" }}</div></div>
+      <div class="field"><label>Tu rol</label><div>Firmante asignado</div></div>
+    </div>
+
+    <div class="card">
+      <div class="h2">Vista previa (PDF)</div>
+      <iframe class="pdf" src="{% url 'portal_document_pdf' document.id %}"></iframe>
+      <p class="footer-note">Si tu navegador no muestra el PDF dentro del recuadro, usa el detalle del documento para descargarlo (próximo ajuste).</p>
+    </div>
+  </section>
+
+  <form method="post" style="margin-top:14px">
+    {% csrf_token %}
+    <button class="btn btn-primary btn-block" type="submit">Siguiente</button>
+  </form>
+{% endblock %}

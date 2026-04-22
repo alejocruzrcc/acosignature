@@ -1,0 +1,32 @@
+{% extends "base_portal.html" %}
+{% block title %}Constructora Indico{% endblock %}
+{% block content %}
+  <section class="card grid grid-2">
+    <div>
+      <div class="h2">Bienvenido</div>
+      <h1 class="h1">Constructora Indico</h1>
+      <p style="margin:0;color:var(--muted);line-height:1.6">
+        Portal de documentos y aprobaciones con firma. Accede con tu usuario para crear documentos,
+        asignar firmantes y completar el flujo de aprobación.
+      </p>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn btn-primary" href="{% url 'login' %}">Iniciar sesión</a>
+        {% if request.user.is_authenticated %}
+          <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Ir a aprobaciones</a>
+        {% endif %}
+      </div>
+      <p class="footer-note">
+        Tip: en móvil, usa “Añadir a pantalla de inicio” para una experiencia tipo app.
+      </p>
+    </div>
+    <div class="card" style="box-shadow:none">
+      <div class="h2">Acceso</div>
+      <p style="margin:0;color:var(--muted);line-height:1.6">
+        Si ya tienes cuenta, inicia sesión para entrar a <strong>/aprobaciones</strong>.
+      </p>
+      <div style="margin-top:12px">
+        <a class="btn btn-primary btn-block" href="{% url 'login' %}">Continuar</a>
+      </div>
+    </div>
+  </section>
+{% endblock %}

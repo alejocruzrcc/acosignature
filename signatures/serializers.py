@@ -22,10 +22,15 @@ class SignatureSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         request = self.context['request']
         client_ip = self._get_ip(request)
-        signature = Signature.objects.create(
+        document = validated_data['document']
+        signature, _created = Signature.objects.update_or_create(
+            document=document,
             user=request.user,
-            ip_address=client_ip,
-            **validated_data,
+            defaults={
+                'signature_data': validated_data['signature_data'],
+                'ip_address': client_ip,
+                'is_valid': True,
+            },
         )
         WorkflowService.sign_document(signature.document, request.user, ip_address=client_ip)
         return signature

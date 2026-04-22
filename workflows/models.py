@@ -30,6 +30,8 @@ class AuditEvent(models.Model):
 
     class Meta:
         ordering = ('-created_at',)
+        verbose_name = 'Evento de auditoría'
+        verbose_name_plural = 'Eventos de auditoría'
 
     def __str__(self):
         return f'{self.action} by {self.actor_id or "anonymous"}'

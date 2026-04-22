@@ -1,0 +1,51 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{% block title %}Constructora Indico{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{% static 'portal/app.css' %}" />
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="{% url 'portal_home' %}">
+          <div class="brand-title">Constr<span>uctora</span> <span>Indico</span></div>
+          <div class="brand-sub">documentos</div>
+        </a>
+        <div style="display:flex;align-items:center;gap:10px">
+          {% if request.user.is_authenticated %}
+            <div style="font-size:12px;color:var(--muted);text-align:right;line-height:1.2">
+              <div style="font-weight:800;color:var(--text)">{{ request.user.username }}</div>
+              <div>{{ request.user.get_full_name }}</div>
+            </div>
+            <form method="post" action="{% url 'logout' %}">
+              {% csrf_token %}
+              <button class="btn btn-ghost" type="submit">Salir</button>
+            </form>
+          {% else %}
+            <a class="btn btn-ghost" href="{% url 'login' %}">Entrar</a>
+          {% endif %}
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      {% if messages %}
+        <div class="messages">
+          {% for message in messages %}
+            <div class="message">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </main>
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>
