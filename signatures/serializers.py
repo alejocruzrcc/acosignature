@@ -1,0 +1,38 @@
+from rest_framework import serializers
+
+from documents.models import Document
+from workflows.services import WorkflowService
+
+from .models import Signature
+
+
+class SignatureSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Signature
+        fields = ('id', 'document', 'user', 'signed_at', 'ip_address', 'signature_data', 'is_valid')
+        read_only_fields = ('id', 'user', 'signed_at', 'ip_address', 'is_valid')
+
+    def validate_document(self, value):
+        if value.status in {Document.Status.APPROVED, Document.Status.REJECTED}:
+            raise serializers.ValidationError('Documento cerrado, no se puede firmar.')
+        return value
+
+    def create(self, validated_data):
+        request = self.context['request']
+        client_ip = self._get_ip(request)
+        signature = Signature.objects.create(
+            user=request.user,
+            ip_address=client_ip,
+            **validated_data,
+        )
+        WorkflowService.sign_document(signature.document, request.user, ip_address=client_ip)
+        return signature
+
+    @staticmethod
+    def _get_ip(request):
+        forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+        if forwarded:
+            return forwarded.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR')
