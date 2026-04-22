@@ -10,7 +10,50 @@ Motor de base de datos configurado: PostgreSQL.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+```
+
+## Entornos (local vs producción) — Opción A: 2 archivos + `source`
+
+### 1) Crea tus archivos reales (no van a git)
+
+```bash
+cp .env.local.example .env.local
+cp .env.prod.example .env.prod
+```
+
+Edita credenciales en cada archivo.
+
+### 2) Carga el entorno en tu terminal (debe ser `source`)
+
+Local:
+
+```bash
+source ./scripts/use_env.sh local
+```
+
+Producción/Neon (cuando quieras apuntar tu shell local a prod **con cuidado**):
+
+```bash
+source ./scripts/use_env.sh prod
+```
+
+Alternativa equivalente:
+
+```bash
+set -a
+source .env.local   # o: source .env.prod
+set +a
+```
+
+### 3) Verifica a qué DB está apuntando tu shell
+
+```bash
+python manage.py shell -c "from django.conf import settings; print(settings.DATABASES['default'])"
+```
+
+### 4) Arranca Django
+
+```bash
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
