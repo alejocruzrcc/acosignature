@@ -37,6 +37,8 @@ pip install -r requirements.txt && python manage.py collectstatic --noinput
 
 El proyecto ya incluye **WhiteNoise** para servir `/static/` desde `STATIC_ROOT`.
 
+Si ves errores tipo `admin/css/base.css could not be found` con storage “Manifest”, casi siempre significa que **no corrió `collectstatic` en el build** o falló silenciosamente: revisa logs de **Build** en Render.
+
 ## Endpoints
 
 ### Auth
