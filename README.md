@@ -2,6 +2,8 @@
 
 API REST de gestión documental con firma y workflow.
 
+Motor de base de datos configurado: PostgreSQL.
+
 ## Instalación
 
 ```bash
@@ -13,6 +15,16 @@ python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
+
+## Neon (Postgres) + Render
+
+1. En Neon, copia el **Connection string** (como aparece en el modal “Connect to your database”).
+2. En Render, crea la variable de entorno:
+   - `DATABASE_URL=<pega el string completo>`
+3. Opcional (recomendado para serverless/pooler):
+   - `DB_CONN_MAX_AGE=0`
+
+Si no defines `DATABASE_URL`, el proyecto usará `DB_HOST/DB_USER/DB_PASSWORD/...` (útil para Postgres local).
 
 ## Endpoints
 
