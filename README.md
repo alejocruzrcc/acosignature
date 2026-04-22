@@ -26,6 +26,17 @@ python manage.py runserver
 
 Si no defines `DATABASE_URL`, el proyecto usará `DB_HOST/DB_USER/DB_PASSWORD/...` (útil para Postgres local).
 
+### Admin sin estilos en Render (`DEBUG=False`)
+
+En producción necesitas generar estáticos:
+
+**Build Command (Render)**
+```bash
+pip install -r requirements.txt && python manage.py collectstatic --noinput
+```
+
+El proyecto ya incluye **WhiteNoise** para servir `/static/` desde `STATIC_ROOT`.
+
 ## Endpoints
 
 ### Auth
