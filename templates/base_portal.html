@@ -24,6 +24,7 @@
               <div style="font-weight:800;color:var(--text)">{{ request.user.username }}</div>
               <div>{{ request.user.get_full_name }}</div>
             </div>
+            <a class="btn btn-ghost" href="{% url 'portal_my_profile' %}">Mi perfil</a>
             <form method="post" action="{% url 'logout' %}">
               {% csrf_token %}
               <button class="btn btn-ghost" type="submit">Salir</button>

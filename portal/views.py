@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import mimetypes
 from urllib.parse import quote
 
 from django.contrib import messages
@@ -10,18 +12,50 @@ from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 
 from documents.models import Document
+from documents.services import rebuild_signed_pdf
 from signatures.models import Signature
 from workflows.services import WorkflowService
 
-from .forms import DocumentCreateForm, SignatureCaptureForm
+from .forms import DocumentCreateForm, SignatureCaptureForm, UserProfileForm
 
 
 def home(request):
     return render(request, 'portal/home.html')
 
 
+@login_required
+def my_profile(request):
+    if request.method == 'POST':
+        form = UserProfileForm(request.POST, request.FILES, instance=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Perfil actualizado correctamente.')
+            return redirect('portal_my_profile')
+    else:
+        form = UserProfileForm(instance=request.user)
+
+    return render(request, 'portal/mi_perfil.html', {'form': form})
+
+
 def _signatory_for(user, document: Document):
     return document.signatories.filter(user=user).first()
+
+
+def _file_to_data_url(file_obj, fallback_name='firma.png'):
+    content_type = getattr(file_obj, 'content_type', None)
+    if not content_type:
+        name = getattr(file_obj, 'name', fallback_name)
+        guessed, _ = mimetypes.guess_type(name)
+        content_type = guessed or 'image/png'
+
+    raw = file_obj.read()
+    try:
+        file_obj.seek(0)
+    except Exception:
+        pass
+
+    encoded = base64.b64encode(raw).decode('ascii')
+    return f'data:{content_type};base64,{encoded}'
 
 
 @login_required
@@ -108,12 +142,13 @@ def document_pdf(request, pk: int):
     if not document.signatories.filter(user=request.user).exists() and document.uploaded_by_id != request.user.id:
         return HttpResponseForbidden('No tienes acceso a este documento.')
 
-    if not document.file:
+    file_field = document.signed_file if document.signed_file else document.file
+    if not file_field:
         raise Http404()
 
-    document.file.open('rb')
-    filename = document.file.name.split('/')[-1]
-    resp = FileResponse(document.file, content_type='application/pdf', as_attachment=False)
+    file_field.open('rb')
+    filename = file_field.name.split('/')[-1]
+    resp = FileResponse(file_field, content_type='application/pdf', as_attachment=False)
     # iOS/Safari es sensible a headers y a incrustación en iframes; inline + filename ASCII/UTF-8 ayuda.
     ascii_name = filename.encode('ascii', 'ignore').decode('ascii') or 'documento.pdf'
     utf8_name = quote(filename)
@@ -122,6 +157,20 @@ def document_pdf(request, pk: int):
     # Evita respuestas cacheadas “pegadas” entre usuarios/sesiones en proxies/CDN
     resp['Cache-Control'] = 'private, no-store'
     return resp
+
+
+@login_required
+def document_signed_download(request, pk: int):
+    document = get_object_or_404(Document, pk=pk)
+    if not document.signatories.filter(user=request.user).exists() and document.uploaded_by_id != request.user.id:
+        return HttpResponseForbidden('No tienes acceso a este documento.')
+
+    if not document.signed_file:
+        raise Http404('Este documento aún no tiene versión firmada.')
+
+    document.signed_file.open('rb')
+    filename = document.signed_file.name.split('/')[-1]
+    return FileResponse(document.signed_file, content_type='application/pdf', as_attachment=True, filename=filename)
 
 
 @login_required
@@ -156,9 +205,24 @@ def sign_flow_sign(request, pk: int):
     if signatory.status == 'signed':
         return redirect('portal_document_detail', pk=document.id)
 
-    form = SignatureCaptureForm(request.POST or None)
+    form = SignatureCaptureForm(request.POST or None, request.FILES or None, user=request.user)
     if request.method == 'POST' and form.is_valid():
-        request.session['pending_signature_data'] = form.cleaned_data['signature_data']
+        mode = form.cleaned_data['signature_mode']
+
+        if mode == SignatureCaptureForm.SignatureMode.DRAW:
+            signature_data = form.cleaned_data['signature_data']
+        elif mode == SignatureCaptureForm.SignatureMode.SAVED:
+            request.user.signature_image.open('rb')
+            signature_data = _file_to_data_url(request.user.signature_image, fallback_name='firma_guardada.png')
+            request.user.signature_image.close()
+        else:
+            uploaded = form.cleaned_data['signature_upload']
+            signature_data = _file_to_data_url(uploaded, fallback_name=uploaded.name)
+            # Guarda la firma subida para siguientes firmas del usuario
+            request.user.signature_image = uploaded
+            request.user.save(update_fields=['signature_image'])
+
+        request.session['pending_signature_data'] = signature_data
         return redirect('portal_sign_flow_finalize', pk=document.id)
 
     return render(
@@ -168,6 +232,8 @@ def sign_flow_sign(request, pk: int):
             'document': document,
             'signatory': signatory,
             'form': form,
+            'has_saved_signature': bool(request.user.signature_image),
+            'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
         },
     )
 
@@ -197,6 +263,7 @@ def sign_flow_finalize(request, pk: int):
                 },
             )
             WorkflowService.sign_document(document, request.user, ip_address=request.META.get('REMOTE_ADDR'))
+            rebuild_signed_pdf(document)
 
         request.session.pop('pending_signature_data', None)
         messages.success(request, 'Firma registrada.')

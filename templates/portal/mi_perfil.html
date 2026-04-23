@@ -1,0 +1,81 @@
+{% extends "base_portal.html" %}
+{% block title %}Mi perfil · Constructora Indico{% endblock %}
+{% block content %}
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div>
+      <div class="h2">Cuenta</div>
+      <h1 class="h1">Mi perfil</h1>
+      <p style="margin:0;color:var(--muted);line-height:1.6">
+        Actualiza tus datos personales y tu imagen de firma para usarla en aprobaciones.
+      </p>
+    </div>
+    <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Volver</a>
+  </div>
+
+  <section class="grid grid-2" style="margin-top:14px">
+    <div class="card">
+      <div class="h2">Datos del usuario</div>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="field">
+          <label for="id_first_name">Nombre</label>
+          {{ form.first_name }}
+          {{ form.first_name.errors }}
+        </div>
+
+        <div class="field">
+          <label for="id_last_name">Apellido</label>
+          {{ form.last_name }}
+          {{ form.last_name.errors }}
+        </div>
+
+        <div class="field">
+          <label for="id_email">Correo electrónico</label>
+          {{ form.email }}
+          {{ form.email.errors }}
+        </div>
+
+        <div class="field">
+          <label for="id_phone">Teléfono</label>
+          {{ form.phone }}
+          {{ form.phone.errors }}
+        </div>
+
+        <div class="field">
+          <label for="id_document_number">Número de documento</label>
+          {{ form.document_number }}
+          {{ form.document_number.errors }}
+        </div>
+
+        <div class="field">
+          <label for="id_cargo">Cargo</label>
+          {{ form.cargo }}
+          {{ form.cargo.errors }}
+        </div>
+
+        <div class="field">
+          <label for="id_signature_image">Firma (imagen)</label>
+          {{ form.signature_image }}
+          <div class="help">Formato sugerido PNG con fondo transparente.</div>
+          {{ form.signature_image.errors }}
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit">Guardar cambios</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="h2">Vista previa de firma</div>
+      {% if request.user.signature_image %}
+        <div style="border:1px solid var(--line);border-radius:16px;padding:12px;background:#fff">
+          <img src="{{ request.user.signature_image.url }}" alt="Firma del usuario" style="max-width:100%;max-height:260px;display:block;margin:auto" />
+        </div>
+      {% else %}
+        <p style="color:var(--muted);margin:0">
+          Aún no tienes una firma cargada. Puedes subirla desde el formulario.
+        </p>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

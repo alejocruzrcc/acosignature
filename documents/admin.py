@@ -14,6 +14,17 @@ class DocumentAdmin(admin.ModelAdmin):
     list_filter = ('status', 'requires_signature')
     search_fields = ('title', 'uploaded_by__username')
     readonly_fields = ('created_at', 'updated_at')
+    fields = (
+        'title',
+        'description',
+        'file',
+        'signed_file',
+        'uploaded_by',
+        'status',
+        'requires_signature',
+        'created_at',
+        'updated_at',
+    )
     inlines = (DocumentSignatoryInline,)
 
 

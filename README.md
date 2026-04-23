@@ -137,11 +137,13 @@ Rutas principales:
 - `/aprobaciones/nuevo/` alta con selección de firmantes
 - `/aprobaciones/<id>/` detalle con progreso
 - `/aprobaciones/<id>/firmar/` flujo por pasos (revisión → firma → finalizar)
+- `/aprobaciones/<id>/pdf-firmado/` descarga del PDF firmado acumulado
 
 Notas:
 
 - Si un documento tiene `DocumentSignatory`, el estado pasa a `approved` cuando **todos** firman.
 - Si no hay firmantes asignados, el flujo antiguo por API mantiene `signed` al firmar.
+- En cada firma se regenera un PDF firmado: original + hoja de firmas (nombre, documento y firma).
 
 ## Tests
 

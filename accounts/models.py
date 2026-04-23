@@ -10,6 +10,8 @@ class User(AbstractUser):
 
     document_number = models.CharField(max_length=50, blank=True)
     phone = models.CharField(max_length=30, blank=True)
+    cargo = models.CharField(max_length=120, blank=True)
+    signature_image = models.ImageField(upload_to='user_signatures/', blank=True, null=True)
     role = models.CharField(max_length=20, choices=Roles.choices, default=Roles.CLIENT)
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

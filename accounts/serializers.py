@@ -9,7 +9,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             'id', 'username', 'email', 'first_name', 'last_name', 'document_number',
-            'phone', 'role', 'is_verified', 'created_at', 'updated_at'
+            'phone', 'cargo', 'signature_image', 'role', 'is_verified', 'created_at', 'updated_at'
         )
         read_only_fields = ('id', 'created_at', 'updated_at', 'is_verified')
 
@@ -21,7 +21,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             'id', 'username', 'email', 'password', 'first_name', 'last_name',
-            'document_number', 'phone', 'role'
+            'document_number', 'phone', 'cargo', 'signature_image', 'role'
         )
         read_only_fields = ('id',)
 

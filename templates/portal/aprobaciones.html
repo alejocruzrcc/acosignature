@@ -75,6 +75,9 @@
               </td>
               <td style="text-align:right;white-space:nowrap">
                 <a class="btn btn-ghost" href="{% url 'portal_document_detail' d.id %}">Ver</a>
+                {% if d.signed_file %}
+                  <a class="btn btn-ghost" href="{% url 'portal_document_signed_download' d.id %}">Descargar firmado</a>
+                {% endif %}
                 {% if row.needs_my_signature %}
                   <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
                 {% endif %}

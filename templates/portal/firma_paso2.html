@@ -6,25 +6,61 @@
       <div class="h2">Paso 2 de 3</div>
       <h1 class="h1">Captura tu firma</h1>
       <p style="margin:0;color:var(--muted);line-height:1.6">
-        Dibuja en el recuadro con el dedo o el mouse. Luego continúa a confirmación.
+        Elige cómo quieres firmar: dibujando, usando tu firma guardada o subiendo una imagen.
       </p>
     </div>
     <a class="btn btn-ghost" href="{% url 'portal_sign_flow_review' document.id %}">Atrás</a>
   </div>
 
   <section class="card" style="margin-top:14px">
-    <div style="border:1px dashed var(--brand);border-radius:16px;padding:12px;background:#fffaf2">
-      <canvas id="sig-canvas" style="width:100%;height:240px;border-radius:14px;border:1px solid var(--line);touch-action:none;background:#fff"></canvas>
-      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn btn-ghost" type="button" id="sig-clear">Limpiar</button>
-      </div>
-    </div>
-
-    <form method="post" style="margin-top:12px" id="sig-form">
+    <form method="post" style="margin-top:12px" id="sig-form" enctype="multipart/form-data">
       {% csrf_token %}
       <input type="hidden" name="signature_data" id="signature_data" value="" />
-      <button class="btn btn-primary btn-block" type="submit" id="sig-next" disabled>Siguiente</button>
-      <p class="footer-note">La firma se guarda como imagen (data URL) en base64.</p>
+
+      <div class="field">
+        <label for="signature_mode">Método de firma</label>
+        <select name="signature_mode" id="signature_mode">
+          <option value="draw">Dibujar firma</option>
+          {% if has_saved_signature %}
+            <option value="saved">Usar firma guardada</option>
+          {% endif %}
+          <option value="upload">Subir imagen de firma</option>
+        </select>
+        {% if form.signature_mode.errors %}
+          <div class="help" style="color:#b91c1c">{{ form.signature_mode.errors|join:", " }}</div>
+        {% endif %}
+      </div>
+
+      <div id="draw-panel" style="border:1px dashed var(--brand);border-radius:16px;padding:12px;background:#fffaf2">
+        <canvas id="sig-canvas" style="width:100%;height:240px;border-radius:14px;border:1px solid var(--line);touch-action:none;background:#fff"></canvas>
+        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost" type="button" id="sig-clear">Limpiar</button>
+        </div>
+        {% if form.signature_data.errors %}
+          <div class="help" style="color:#b91c1c">{{ form.signature_data.errors|join:", " }}</div>
+        {% endif %}
+      </div>
+
+      <div id="saved-panel" style="display:none;border:1px solid var(--line);border-radius:16px;padding:12px;background:#fff">
+        {% if has_saved_signature %}
+          <img src="{{ saved_signature_url }}" alt="Firma guardada" style="max-width:100%;max-height:220px;display:block;margin:auto" />
+          <p class="footer-note">Se usará la firma guardada en tu usuario.</p>
+        {% else %}
+          <p class="footer-note">No tienes una firma guardada todavía.</p>
+        {% endif %}
+      </div>
+
+      <div id="upload-panel" style="display:none" class="field">
+        <label for="id_signature_upload">Imagen de firma</label>
+        <input type="file" name="signature_upload" id="id_signature_upload" accept="image/*" />
+        <div class="help">Se guardará como firma del usuario para futuras aprobaciones.</div>
+        {% if form.signature_upload.errors %}
+          <div class="help" style="color:#b91c1c">{{ form.signature_upload.errors|join:", " }}</div>
+        {% endif %}
+      </div>
+
+      <button class="btn btn-primary btn-block" type="submit" id="sig-next">Siguiente</button>
+      <p class="footer-note">La firma usada se registra como imagen base64 en el documento.</p>
     </form>
   </section>
 
@@ -35,6 +71,11 @@
       const hidden = document.getElementById('signature_data');
       const btnNext = document.getElementById('sig-next');
       const btnClear = document.getElementById('sig-clear');
+      const modeSelect = document.getElementById('signature_mode');
+      const drawPanel = document.getElementById('draw-panel');
+      const savedPanel = document.getElementById('saved-panel');
+      const uploadPanel = document.getElementById('upload-panel');
+      const uploadInput = document.getElementById('id_signature_upload');
 
       function resize() {
         const rect = canvas.getBoundingClientRect();
@@ -86,12 +127,25 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         hidden.value = '';
         hasInk = false;
-        btnNext.disabled = true;
         resize();
       });
 
+      function refreshModeUI() {
+        const mode = modeSelect.value;
+        drawPanel.style.display = mode === 'draw' ? 'block' : 'none';
+        savedPanel.style.display = mode === 'saved' ? 'block' : 'none';
+        uploadPanel.style.display = mode === 'upload' ? 'block' : 'none';
+      }
+
+      modeSelect.addEventListener('change', refreshModeUI);
+      refreshModeUI();
+
       document.getElementById('sig-form').addEventListener('submit', (e) => {
-        if (!hidden.value) {
+        const mode = modeSelect.value;
+        if (mode === 'draw' && !hidden.value) {
+          e.preventDefault();
+        }
+        if (mode === 'upload' && uploadInput && !uploadInput.files.length) {
           e.preventDefault();
         }
       });

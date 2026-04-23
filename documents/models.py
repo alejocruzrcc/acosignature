@@ -12,6 +12,7 @@ class Document(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     file = models.FileField(upload_to='documents/')
+    signed_file = models.FileField(upload_to='documents/signed/', blank=True, null=True)
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='documents')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     requires_signature = models.BooleanField(default=True)

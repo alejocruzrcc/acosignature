@@ -9,9 +9,10 @@
       asignar firmantes y completar el flujo de aprobación.
     </p>
     <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
-      <a class="btn btn-primary" href="{% url 'login' %}">Iniciar sesión</a>
       {% if request.user.is_authenticated %}
         <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Ir a aprobaciones</a>
+      {% else %}
+        <a class="btn btn-primary" href="{% url 'login' %}">Iniciar sesión</a>
       {% endif %}
     </div>
     <p class="footer-note">
