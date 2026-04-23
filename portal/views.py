@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -111,8 +113,14 @@ def document_pdf(request, pk: int):
 
     document.file.open('rb')
     filename = document.file.name.split('/')[-1]
-    resp = FileResponse(document.file, content_type='application/pdf')
-    resp['Content-Disposition'] = f'inline; filename="{filename}"'
+    resp = FileResponse(document.file, content_type='application/pdf', as_attachment=False)
+    # iOS/Safari es sensible a headers y a incrustación en iframes; inline + filename ASCII/UTF-8 ayuda.
+    ascii_name = filename.encode('ascii', 'ignore').decode('ascii') or 'documento.pdf'
+    utf8_name = quote(filename)
+    resp['Content-Disposition'] = f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{utf8_name}'
+    resp['X-Content-Type-Options'] = 'nosniff'
+    # Evita respuestas cacheadas “pegadas” entre usuarios/sesiones en proxies/CDN
+    resp['Cache-Control'] = 'private, no-store'
     return resp
 
 

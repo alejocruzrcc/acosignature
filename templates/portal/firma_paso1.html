@@ -1,5 +1,19 @@
 {% extends "base_portal.html" %}
 {% block title %}Revisión · {{ document.title }}{% endblock %}
+
+{% block extra_head %}
+  <style>
+    /* En móviles, el visor embebido de PDF suele fallar; priorizamos abrir en visor nativo */
+    @media (max-width: 720px){
+      .pdf-embed{ display:none; }
+      .pdf-mobile-actions{ display:block; }
+    }
+    @media (min-width: 721px){
+      .pdf-mobile-actions{ display:none; }
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
     <div>
@@ -22,8 +36,24 @@
 
     <div class="card">
       <div class="h2">Vista previa (PDF)</div>
-      <iframe class="pdf" src="{% url 'portal_document_pdf' document.id %}"></iframe>
-      <p class="footer-note">Si tu navegador no muestra el PDF dentro del recuadro, usa el detalle del documento para descargarlo (próximo ajuste).</p>
+
+      {% url 'portal_document_pdf' document.id as pdf_url %}
+
+      <div class="pdf-mobile-actions" style="display:none">
+        <p style="margin:0 0 10px;color:var(--muted);line-height:1.6">
+          En muchos teléfonos el PDF no se puede incrustar bien. Abre el documento en el visor nativo y vuelve aquí para continuar.
+        </p>
+        <a class="btn btn-primary btn-block" href="{{ pdf_url }}" target="_blank" rel="noopener">Abrir PDF</a>
+      </div>
+
+      <!-- object + iframe: mejora compatibilidad entre navegadores -->
+      <object class="pdf pdf-embed" data="{{ pdf_url }}#view=FitH" type="application/pdf">
+        <iframe class="pdf" src="{{ pdf_url }}#view=FitH"></iframe>
+      </object>
+
+      <p class="footer-note">
+        Si aún no carga: usa <strong>Abrir PDF</strong> (recomendado en iPhone/Android).
+      </p>
     </div>
   </section>
 
