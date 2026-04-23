@@ -39,11 +39,11 @@
                 <span></span>
                 <span></span>
               </button>
-              <div class="mobile-menu" id="mobile-menu" hidden>
+              <div class="mobile-menu" id="mobile-menu">
                 <a class="btn btn-ghost btn-block" href="{% url 'portal_my_profile' %}">Mi perfil</a>
                 <form method="post" action="{% url 'logout' %}">
                   {% csrf_token %}
-                  <button class="btn btn-ghost btn-block" type="submit">Cerrar sesión</button>
+                  <button class="btn btn-ghost btn-block" type="submit">Salir</button>
                 </form>
               </div>
             </div>
@@ -72,7 +72,7 @@
         if (!toggle || !menu) return;
 
         function closeMenu() {
-          menu.hidden = true;
+          menu.classList.remove('is-open');
           toggle.setAttribute('aria-expanded', 'false');
         }
 
@@ -81,13 +81,13 @@
           if (isOpen) {
             closeMenu();
           } else {
-            menu.hidden = false;
+            menu.classList.add('is-open');
             toggle.setAttribute('aria-expanded', 'true');
           }
         });
 
         document.addEventListener('click', function (e) {
-          if (!menu.hidden && !menu.contains(e.target) && !toggle.contains(e.target)) {
+          if (menu.classList.contains('is-open') && !menu.contains(e.target) && !toggle.contains(e.target)) {
             closeMenu();
           }
         });
