@@ -74,6 +74,15 @@
         {{ form.firmantes.errors }}
       </div>
 
+      <div class="field">
+        <label for="id_soy_firmante">Soy firmante</label>
+        <div style="display:flex;align-items:center;gap:10px">
+          {{ form.soy_firmante }}
+          <span class="help" style="margin:0">Si está marcado, también te agregaremos como firmante de este documento.</span>
+        </div>
+        {{ form.soy_firmante.errors }}
+      </div>
+
       {% if form.non_field_errors %}
         <div class="message" style="border-left-color:#ef4444;background:#fff5f5">
           {{ form.non_field_errors }}

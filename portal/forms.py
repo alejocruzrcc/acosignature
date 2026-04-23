@@ -1,3 +1,5 @@
+import os
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.db import models
@@ -17,6 +19,11 @@ class UserModelMultipleChoiceField(forms.ModelMultipleChoiceField):
 
 
 class DocumentCreateForm(forms.ModelForm):
+    soy_firmante = forms.BooleanField(
+        required=False,
+        initial=False,
+        label='Soy firmante',
+    )
     firmantes = UserModelMultipleChoiceField(
         queryset=User.objects.none(),
         required=True,
@@ -44,13 +51,18 @@ class DocumentCreateForm(forms.ModelForm):
     def clean_file(self):
         file = self.cleaned_data['file']
         validate_document_file(file)
+        ext = os.path.splitext(file.name)[1].lower()
+        content_type = (getattr(file, 'content_type', '') or '').lower()
+        if ext != '.pdf' or (content_type and content_type not in {'application/pdf', 'application/x-pdf'}):
+            raise forms.ValidationError('Solo se permiten archivos PDF.')
         return file
 
     def clean_firmantes(self):
         users = self.cleaned_data['firmantes']
         uploader = self.initial.get('uploader')
-        if uploader and any(u.id == uploader.id for u in users):
-            raise forms.ValidationError('No puedes incluirte a ti mismo como firmante.')
+        soy_firmante = self.cleaned_data.get('soy_firmante', False)
+        if uploader and any(u.id == uploader.id for u in users) and not soy_firmante:
+            raise forms.ValidationError('Si deseas incluirte, marca la opción "Soy firmante".')
         if not users:
             raise forms.ValidationError('Selecciona al menos un firmante.')
         return users
@@ -102,3 +114,10 @@ class UserProfileForm(forms.ModelForm):
             'cargo',
             'signature_image',
         )
+
+
+class RejectionReasonForm(forms.Form):
+    reason = forms.CharField(
+        label='Razón de rechazo',
+        widget=forms.Textarea(attrs={'rows': 5, 'placeholder': 'Describe el motivo del rechazo...'}),
+    )

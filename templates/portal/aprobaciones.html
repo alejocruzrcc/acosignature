@@ -27,6 +27,7 @@
             <div style="display:flex;gap:10px;align-items:center">
               <span class="pill pill-pending">Pendiente</span>
               <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
+              <a class="btn btn-ghost" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
             </div>
           </div>
         {% endfor %}
@@ -80,6 +81,7 @@
                 {% endif %}
                 {% if row.needs_my_signature %}
                   <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
+                  <a class="btn btn-ghost" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
                 {% endif %}
               </td>
             </tr>

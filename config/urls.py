@@ -23,6 +23,7 @@ urlpatterns = [
     path('aprobaciones/<int:pk>/pdf/', portal_views.document_pdf, name='portal_document_pdf'),
     path('aprobaciones/<int:pk>/pdf-firmado/', portal_views.document_signed_download, name='portal_document_signed_download'),
     path('aprobaciones/<int:pk>/aprobar/', portal_views.approve_entry, name='portal_approve_entry'),
+    path('aprobaciones/<int:pk>/rechazar/', portal_views.reject_entry, name='portal_reject_entry'),
     path('aprobaciones/<int:pk>/firmar/', portal_views.sign_flow_review, name='portal_sign_flow_review'),
     path('aprobaciones/<int:pk>/firmar/firma/', portal_views.sign_flow_sign, name='portal_sign_flow_sign'),
     path('aprobaciones/<int:pk>/firmar/finalizar/', portal_views.sign_flow_finalize, name='portal_sign_flow_finalize'),

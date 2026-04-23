@@ -17,6 +17,7 @@
       <div class="h2">Datos del usuario</div>
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
+        <input type="hidden" name="action" value="update_profile" />
 
         <div class="field">
           <label for="id_first_name">Nombre</label>
@@ -66,6 +67,43 @@
     </div>
 
     <div class="card">
+      <div class="h2">Seguridad</div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="change_password" />
+
+        <div class="field">
+          <label for="{{ password_form.old_password.id_for_label }}">Contraseña actual</label>
+          {{ password_form.old_password }}
+          {{ password_form.old_password.errors }}
+        </div>
+
+        <div class="field">
+          <label for="{{ password_form.new_password1.id_for_label }}">Nueva contraseña</label>
+          {{ password_form.new_password1 }}
+          {{ password_form.new_password1.errors }}
+        </div>
+
+        <div class="field">
+          <label for="{{ password_form.new_password2.id_for_label }}">Confirmar nueva contraseña</label>
+          {{ password_form.new_password2 }}
+          {{ password_form.new_password2.errors }}
+        </div>
+
+        {% if password_form.non_field_errors %}
+          <div class="message" style="border-left-color:#ef4444;background:#fff5f5">
+            {{ password_form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        {% if password_form.new_password1.help_text %}
+          <div class="help">{{ password_form.new_password1.help_text|safe }}</div>
+        {% endif %}
+
+        <button class="btn btn-primary btn-block" type="submit">Cambiar contraseña</button>
+      </form>
+
+      <div style="height:16px"></div>
       <div class="h2">Vista previa de firma</div>
       {% if request.user.signature_image %}
         <div style="border:1px solid var(--line);border-radius:16px;padding:12px;background:#fff">

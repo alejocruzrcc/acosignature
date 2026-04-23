@@ -13,6 +13,7 @@
       <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Volver</a>
       {% if my_signatory and my_signatory.status == "pending" %}
         <a class="btn btn-primary" href="{% url 'portal_approve_entry' document.id %}">Aprobar</a>
+        <a class="btn btn-ghost" href="{% url 'portal_reject_entry' document.id %}">Rechazar</a>
       {% endif %}
     </div>
   </div>
@@ -62,6 +63,13 @@
               <td>
                 {% if s.status == "signed" %}
                   <span class="pill pill-signed">Firmado</span>
+                {% elif s.status == "rejected" %}
+                  <span class="pill pill-pending" style="border-color:#fecaca;background:#fff1f2;color:#991b1b">Rechazado</span>
+                  {% if s.rejection_reason %}
+                    <div style="margin-top:6px;font-size:12px;color:#7f1d1d;line-height:1.4">
+                      Motivo: {{ s.rejection_reason }}
+                    </div>
+                  {% endif %}
                 {% else %}
                   <span class="pill pill-pending">Pendiente</span>
                 {% endif %}

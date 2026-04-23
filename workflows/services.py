@@ -1,3 +1,5 @@
+from django.utils import timezone
+
 from accounts.models import User
 from documents.models import Document, DocumentSignatory
 
@@ -30,8 +32,14 @@ class WorkflowService:
             if updated == 0 and not document.signatories.filter(user=actor).exists():
                 raise ValueError('No eres firmante asignado para este documento.')
 
+            rejected = DocumentSignatory.objects.filter(document=document, status=DocumentSignatory.Status.REJECTED).exists()
             pending = DocumentSignatory.objects.filter(document=document, status=DocumentSignatory.Status.PENDING).exists()
-            new_status = Document.Status.PENDING if pending else Document.Status.APPROVED
+            if rejected:
+                new_status = Document.Status.REJECTED
+            elif pending:
+                new_status = Document.Status.PENDING
+            else:
+                new_status = Document.Status.APPROVED
             if document.status != new_status:
                 document.status = new_status
                 document.save(update_fields=['status', 'updated_at'])
@@ -81,4 +89,33 @@ class WorkflowService:
             document=document,
             ip_address=ip_address,
             metadata={'new_status': Document.Status.REJECTED},
+        )
+
+    @staticmethod
+    def reject_by_signatory(document: Document, actor: User, reason: str, ip_address=None):
+        if document.status in {Document.Status.APPROVED, Document.Status.REJECTED}:
+            raise ValueError('Documento en estado final, no se puede rechazar.')
+
+        signatory = DocumentSignatory.objects.filter(document=document, user=actor).first()
+        if not signatory:
+            raise ValueError('No eres firmante asignado para este documento.')
+        if signatory.status == DocumentSignatory.Status.SIGNED:
+            raise ValueError('Ya firmaste este documento, no puedes rechazarlo.')
+        if signatory.status == DocumentSignatory.Status.REJECTED:
+            raise ValueError('Ya rechazaste este documento.')
+
+        signatory.status = DocumentSignatory.Status.REJECTED
+        signatory.rejection_reason = reason.strip()
+        signatory.rejected_at = timezone.now()
+        signatory.save(update_fields=['status', 'rejection_reason', 'rejected_at', 'updated_at'])
+
+        document.status = Document.Status.REJECTED
+        document.save(update_fields=['status', 'updated_at'])
+
+        WorkflowService._log_event(
+            action=AuditEvent.Actions.REJECT,
+            actor=actor,
+            document=document,
+            ip_address=ip_address,
+            metadata={'new_status': Document.Status.REJECTED, 'reason': reason[:500]},
         )

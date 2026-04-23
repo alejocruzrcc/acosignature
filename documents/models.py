@@ -29,10 +29,13 @@ class DocumentSignatory(models.Model):
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
         SIGNED = 'signed', 'Signed'
+        REJECTED = 'rejected', 'Rejected'
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='signatories')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='document_signatories')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    rejection_reason = models.TextField(blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

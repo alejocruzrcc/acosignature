@@ -5,7 +5,9 @@ import mimetypes
 from urllib.parse import quote
 
 from django.contrib import messages
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm
 from django.db import transaction
 from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponseForbidden
@@ -16,7 +18,7 @@ from documents.services import rebuild_signed_pdf
 from signatures.models import Signature
 from workflows.services import WorkflowService
 
-from .forms import DocumentCreateForm, SignatureCaptureForm, UserProfileForm
+from .forms import DocumentCreateForm, RejectionReasonForm, SignatureCaptureForm, UserProfileForm
 
 
 def home(request):
@@ -25,16 +27,34 @@ def home(request):
 
 @login_required
 def my_profile(request):
-    if request.method == 'POST':
-        form = UserProfileForm(request.POST, request.FILES, instance=request.user)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Perfil actualizado correctamente.')
-            return redirect('portal_my_profile')
-    else:
-        form = UserProfileForm(instance=request.user)
+    profile_form = UserProfileForm(instance=request.user)
+    password_form = PasswordChangeForm(user=request.user)
 
-    return render(request, 'portal/mi_perfil.html', {'form': form})
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'update_profile':
+            profile_form = UserProfileForm(request.POST, request.FILES, instance=request.user)
+            if profile_form.is_valid():
+                profile_form.save()
+                messages.success(request, 'Perfil actualizado correctamente.')
+                return redirect('portal_my_profile')
+
+        elif action == 'change_password':
+            password_form = PasswordChangeForm(user=request.user, data=request.POST)
+            if password_form.is_valid():
+                user = password_form.save()
+                # Mantiene la sesión activa tras el cambio de contraseña
+                update_session_auth_hash(request, user)
+                messages.success(request, 'Contraseña actualizada correctamente.')
+                return redirect('portal_my_profile')
+            messages.error(request, 'No se pudo actualizar la contraseña. Revisa los datos ingresados.')
+
+    return render(
+        request,
+        'portal/mi_perfil.html',
+        {'form': profile_form, 'password_form': password_form},
+    )
 
 
 def _signatory_for(user, document: Document):
@@ -103,6 +123,8 @@ def document_create(request):
                 document.save()
 
                 signers = list(form.cleaned_data['firmantes'])
+                if form.cleaned_data.get('soy_firmante', False) and request.user not in signers:
+                    signers.append(request.user)
                 for signer in signers:
                     document.signatories.create(user=signer, status='pending')
 
@@ -182,6 +204,9 @@ def sign_flow_review(request, pk: int):
     if signatory.status == 'signed':
         messages.info(request, 'Ya finalizaste tu firma en este documento.')
         return redirect('portal_document_detail', pk=document.id)
+    if signatory.status == 'rejected':
+        messages.info(request, 'Ya rechazaste este documento.')
+        return redirect('portal_document_detail', pk=document.id)
 
     if request.method == 'POST':
         return redirect('portal_sign_flow_sign', pk=document.id)
@@ -203,6 +228,9 @@ def sign_flow_sign(request, pk: int):
     if not signatory:
         return HttpResponseForbidden('No eres firmante de este documento.')
     if signatory.status == 'signed':
+        return redirect('portal_document_detail', pk=document.id)
+    if signatory.status == 'rejected':
+        messages.info(request, 'No puedes firmar un documento que ya rechazaste.')
         return redirect('portal_document_detail', pk=document.id)
 
     form = SignatureCaptureForm(request.POST or None, request.FILES or None, user=request.user)
@@ -245,6 +273,9 @@ def sign_flow_finalize(request, pk: int):
     if not signatory:
         return HttpResponseForbidden('No eres firmante de este documento.')
     if signatory.status == 'signed':
+        return redirect('portal_document_detail', pk=document.id)
+    if signatory.status == 'rejected':
+        messages.info(request, 'No puedes firmar un documento que ya rechazaste.')
         return redirect('portal_document_detail', pk=document.id)
 
     signature_data = request.session.get('pending_signature_data')
@@ -291,4 +322,44 @@ def approve_entry(request, pk: int):
         return HttpResponseForbidden('No eres firmante de este documento.')
     if signatory.status == 'signed':
         return redirect('portal_document_detail', pk=document.id)
+    if signatory.status == 'rejected':
+        messages.info(request, 'Ya rechazaste este documento.')
+        return redirect('portal_document_detail', pk=document.id)
     return redirect('portal_sign_flow_review', pk=document.id)
+
+
+@login_required
+def reject_entry(request, pk: int):
+    document = get_object_or_404(Document, pk=pk)
+    signatory = _signatory_for(request.user, document)
+    if not signatory:
+        return HttpResponseForbidden('No eres firmante de este documento.')
+    if signatory.status == 'signed':
+        messages.info(request, 'Ya firmaste este documento, no puedes rechazarlo.')
+        return redirect('portal_document_detail', pk=document.id)
+    if signatory.status == 'rejected':
+        messages.info(request, 'Ya rechazaste este documento.')
+        return redirect('portal_document_detail', pk=document.id)
+
+    form = RejectionReasonForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        reason = form.cleaned_data['reason']
+        try:
+            WorkflowService.reject_by_signatory(
+                document=document,
+                actor=request.user,
+                reason=reason,
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect('portal_document_detail', pk=document.id)
+
+        messages.success(request, 'Documento rechazado correctamente.')
+        return redirect('portal_approvals_index')
+
+    return render(
+        request,
+        'portal/rechazar_documento.html',
+        {'document': document, 'signatory': signatory, 'form': form},
+    )
