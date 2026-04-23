@@ -11,6 +11,47 @@
     @media (min-width: 721px){
       .pdf-mobile-actions{ display:none; }
     }
+
+    .pdf-modal{
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(15, 23, 42, .72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .pdf-modal.is-open{
+      display: flex;
+    }
+    .pdf-modal-card{
+      width: min(980px, 100%);
+      height: min(88vh, 100%);
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow: hidden;
+    }
+    .pdf-modal-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .pdf-modal-body{
+      padding: 8px;
+      background: #fafafa;
+    }
+    .pdf-modal-body .pdf{
+      height: 100%;
+      min-height: 60vh;
+    }
   </style>
 {% endblock %}
 
@@ -41,9 +82,10 @@
 
       <div class="pdf-mobile-actions" style="display:none">
         <p style="margin:0 0 10px;color:var(--muted);line-height:1.6">
-          En muchos teléfonos el PDF no se puede incrustar bien. Abre el documento en el visor nativo y vuelve aquí para continuar.
+          En muchos teléfonos el PDF no se incrusta bien. Usa el modal para visualizarlo.
         </p>
-        <a class="btn btn-primary btn-block" href="{{ pdf_url }}" target="_blank" rel="noopener">Abrir PDF</a>
+        <button class="btn btn-primary btn-block" type="button" id="open-pdf-modal-mobile">Ver documento</button>
+        <a class="btn btn-ghost btn-block" href="{{ pdf_url }}" target="_blank" rel="noopener">Abrir en nueva pestaña</a>
       </div>
 
       <!-- object + iframe: mejora compatibilidad entre navegadores -->
@@ -54,11 +96,64 @@
       <p class="footer-note">
         Si aún no carga: usa <strong>Abrir PDF</strong> (recomendado en iPhone/Android).
       </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" type="button" id="open-pdf-modal">Ver documento</button>
+        <a class="btn btn-ghost" href="{{ pdf_url }}" target="_blank" rel="noopener">Abrir en nueva pestaña</a>
+      </div>
     </div>
   </section>
+
+  <div class="pdf-modal" id="pdf-modal" aria-hidden="true">
+    <div class="pdf-modal-card">
+      <div class="pdf-modal-head">
+        <strong>Documento a firmar</strong>
+        <button class="btn btn-ghost" type="button" id="close-pdf-modal">Cerrar</button>
+      </div>
+      <div class="pdf-modal-body">
+        <object class="pdf" data="{{ pdf_url }}#view=FitH" type="application/pdf">
+          <iframe class="pdf" src="{{ pdf_url }}#view=FitH"></iframe>
+        </object>
+      </div>
+    </div>
+  </div>
 
   <form method="post" style="margin-top:14px">
     {% csrf_token %}
     <button class="btn btn-primary btn-block" type="submit">Siguiente</button>
   </form>
+
+  <script>
+    (function () {
+      const modal = document.getElementById('pdf-modal');
+      const openBtn = document.getElementById('open-pdf-modal');
+      const openBtnMobile = document.getElementById('open-pdf-modal-mobile');
+      const closeBtn = document.getElementById('close-pdf-modal');
+
+      if (!modal) return;
+
+      function openModal() {
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeModal() {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+
+      openBtn && openBtn.addEventListener('click', openModal);
+      openBtnMobile && openBtnMobile.addEventListener('click', openModal);
+      closeBtn && closeBtn.addEventListener('click', closeModal);
+
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeModal();
+      });
+    })();
+  </script>
 {% endblock %}
