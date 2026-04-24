@@ -66,6 +66,15 @@ def _signatory_for(user, document: Document):
     return document.signatories.filter(user=user).first()
 
 
+def _display_user_name(user):
+    full = (user.get_full_name() or '').strip()
+    return full or user.username
+
+
+def _current_pending_signatory(document: Document):
+    return document.signatories.filter(status='pending').select_related('user').order_by('sign_order', 'id').first()
+
+
 def _file_to_data_url(file_obj, fallback_name='firma.png'):
     content_type = getattr(file_obj, 'content_type', None)
     if not content_type:
@@ -95,14 +104,26 @@ def approvals_index(request):
     pending_for_me = []
     for d in documents:
         my_sig = next((s for s in d.signatories.all() if s.user_id == request.user.id), None)
+        current_pending = d.current_pending_signatory()
+        rejected_signatory = d.rejected_signatory()
+        is_my_turn = bool(
+            d.status == Document.Status.PENDING
+            and my_sig
+            and my_sig.status == 'pending'
+            and current_pending
+            and current_pending.user_id == request.user.id
+        )
         row = {
             'document': d,
             'my_signatory': my_sig,
-            'needs_my_signature': bool(my_sig and my_sig.status == 'pending'),
+            'needs_my_signature': is_my_turn,
+            'pending_by': _display_user_name(current_pending.user) if current_pending else '',
+            'waiting_turn': bool(my_sig and my_sig.status == 'pending' and not is_my_turn and d.status == Document.Status.PENDING),
+            'rejected_by': _display_user_name(rejected_signatory.user) if rejected_signatory else '',
         }
         rows.append(row)
-        if row['needs_my_signature']:
-            pending_for_me.append(d)
+        if row['needs_my_signature'] and d.status == Document.Status.PENDING:
+            pending_for_me.append(row)
 
     return render(
         request,
@@ -128,8 +149,8 @@ def document_create(request):
                 signers = list(form.cleaned_data['firmantes'])
                 if form.cleaned_data.get('soy_firmante', False) and request.user not in signers:
                     signers.append(request.user)
-                for signer in signers:
-                    document.signatories.create(user=signer, status='pending')
+                for index, signer in enumerate(signers, start=1):
+                    document.signatories.create(user=signer, status='pending', sign_order=index)
 
             messages.success(request, 'Documento creado y enviado a firmantes.')
             return redirect('portal_approvals_index')
@@ -151,12 +172,24 @@ def document_detail(request, pk: int):
         return HttpResponseForbidden('No tienes acceso a este documento.')
 
     my_signatory = _signatory_for(request.user, document)
+    current_pending = _current_pending_signatory(document)
+    rejected_signatory = document.rejected_signatory()
+    is_my_turn = bool(
+        document.status == Document.Status.PENDING
+        and my_signatory
+        and my_signatory.status == 'pending'
+        and current_pending
+        and current_pending.user_id == request.user.id
+    )
     return render(
         request,
         'portal/documento_detalle.html',
         {
             'document': document,
             'my_signatory': my_signatory,
+            'is_my_turn': is_my_turn,
+            'current_pending_signatory': current_pending,
+            'rejected_signatory': rejected_signatory,
         },
     )
 
@@ -210,6 +243,14 @@ def sign_flow_review(request, pk: int):
     if signatory.status == 'rejected':
         messages.info(request, 'Ya rechazaste este documento.')
         return redirect('portal_document_detail', pk=document.id)
+    if document.status != Document.Status.PENDING:
+        messages.info(request, 'El documento ya no está disponible para firmar.')
+        return redirect('portal_document_detail', pk=document.id)
+    current_pending = _current_pending_signatory(document)
+    if not current_pending or current_pending.user_id != request.user.id:
+        pending_name = _display_user_name(current_pending.user) if current_pending else 'otro firmante'
+        messages.info(request, f'Aún no es tu turno de firma. Pendiente por: {pending_name}.')
+        return redirect('portal_document_detail', pk=document.id)
 
     if request.method == 'POST':
         return redirect('portal_sign_flow_sign', pk=document.id)
@@ -234,6 +275,14 @@ def sign_flow_sign(request, pk: int):
         return redirect('portal_document_detail', pk=document.id)
     if signatory.status == 'rejected':
         messages.info(request, 'No puedes firmar un documento que ya rechazaste.')
+        return redirect('portal_document_detail', pk=document.id)
+    if document.status != Document.Status.PENDING:
+        messages.info(request, 'El documento ya no está disponible para firmar.')
+        return redirect('portal_document_detail', pk=document.id)
+    current_pending = _current_pending_signatory(document)
+    if not current_pending or current_pending.user_id != request.user.id:
+        pending_name = _display_user_name(current_pending.user) if current_pending else 'otro firmante'
+        messages.info(request, f'Aún no es tu turno de firma. Pendiente por: {pending_name}.')
         return redirect('portal_document_detail', pk=document.id)
 
     form = SignatureCaptureForm(request.POST or None, request.FILES or None, user=request.user)
@@ -280,6 +329,14 @@ def sign_flow_finalize(request, pk: int):
     if signatory.status == 'rejected':
         messages.info(request, 'No puedes firmar un documento que ya rechazaste.')
         return redirect('portal_document_detail', pk=document.id)
+    if document.status != Document.Status.PENDING:
+        messages.info(request, 'El documento ya no está disponible para firmar.')
+        return redirect('portal_document_detail', pk=document.id)
+    current_pending = _current_pending_signatory(document)
+    if not current_pending or current_pending.user_id != request.user.id:
+        pending_name = _display_user_name(current_pending.user) if current_pending else 'otro firmante'
+        messages.info(request, f'Aún no es tu turno de firma. Pendiente por: {pending_name}.')
+        return redirect('portal_document_detail', pk=document.id)
 
     signature_data = request.session.get('pending_signature_data')
     if not signature_data:
@@ -296,7 +353,11 @@ def sign_flow_finalize(request, pk: int):
                     'is_valid': True,
                 },
             )
-            WorkflowService.sign_document(document, request.user, ip_address=request.META.get('REMOTE_ADDR'))
+            try:
+                WorkflowService.sign_document(document, request.user, ip_address=request.META.get('REMOTE_ADDR'))
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return redirect('portal_document_detail', pk=document.id)
             rebuild_signed_pdf(document)
 
         request.session.pop('pending_signature_data', None)
@@ -328,6 +389,14 @@ def approve_entry(request, pk: int):
     if signatory.status == 'rejected':
         messages.info(request, 'Ya rechazaste este documento.')
         return redirect('portal_document_detail', pk=document.id)
+    current_pending = _current_pending_signatory(document)
+    if document.status != Document.Status.PENDING:
+        messages.info(request, 'El documento ya no está disponible para firmar.')
+        return redirect('portal_document_detail', pk=document.id)
+    if not current_pending or current_pending.user_id != request.user.id:
+        pending_name = _display_user_name(current_pending.user) if current_pending else 'otro firmante'
+        messages.info(request, f'Aún no es tu turno de firma. Pendiente por: {pending_name}.')
+        return redirect('portal_document_detail', pk=document.id)
     return redirect('portal_sign_flow_review', pk=document.id)
 
 
@@ -342,6 +411,14 @@ def reject_entry(request, pk: int):
         return redirect('portal_document_detail', pk=document.id)
     if signatory.status == 'rejected':
         messages.info(request, 'Ya rechazaste este documento.')
+        return redirect('portal_document_detail', pk=document.id)
+    if document.status != Document.Status.PENDING:
+        messages.info(request, 'El documento ya no está disponible para rechazo.')
+        return redirect('portal_document_detail', pk=document.id)
+    current_pending = _current_pending_signatory(document)
+    if not current_pending or current_pending.user_id != request.user.id:
+        pending_name = _display_user_name(current_pending.user) if current_pending else 'otro firmante'
+        messages.info(request, f'Aún no es tu turno de firma. Pendiente por: {pending_name}.')
         return redirect('portal_document_detail', pk=document.id)
 
     form = RejectionReasonForm(request.POST or None)

@@ -8,15 +8,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="{% static 'portal/app.css' %}" />
+    <link rel="stylesheet" href="{% static 'portal/app.css' %}?v=20260424c" />
     {% block extra_head %}{% endblock %}
   </head>
   <body>
     <header class="topbar">
       <div class="topbar-inner">
         <a class="brand" href="{% url 'portal_home' %}">
-          <div class="brand-title">Constr<span>uctora</span> <span>Indico</span></div>
-          <div class="brand-sub">documentos</div>
+          <img
+            class="brand-logo"
+            src="{% static 'portal/brand-logo.png' %}?v=20260424c"
+            alt="Indico Constructora"
+            width="240"
+            height="42"
+            style="display:block;width:auto;max-width:240px;height:42px;max-height:42px;object-fit:contain"
+          />
         </a>
         <div class="topbar-actions">
           {% if request.user.is_authenticated %}

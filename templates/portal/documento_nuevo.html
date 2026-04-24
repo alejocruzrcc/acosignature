@@ -2,26 +2,67 @@
 {% block title %}Nuevo documento · Constructora Indico{% endblock %}
 
 {% block extra_head %}
-  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
   <style>
-    /* Ajustes visuales para integrar Select2 con el UI del portal */
-    .select2-container--default .select2-selection--multiple{
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      min-height: 48px;
-      padding: 6px 8px;
+    .signer-builder{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      background:#fafafa;
+      display:grid;
+      gap:10px;
     }
-    .select2-container--default .select2-selection--multiple .select2-selection__choice{
-      border-radius: 999px;
-      border: 1px solid #ffe1b3;
-      background: #fff7e8;
-      color: #333;
-      font-weight: 700;
+    .signer-builder-row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
     }
-    .select2-dropdown{
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      overflow: hidden;
+    .signer-builder-row select{
+      flex:1;
+      min-width:220px;
+    }
+    .signer-list{
+      margin:0;
+      padding:0;
+      list-style:none;
+      display:grid;
+      gap:8px;
+    }
+    .signer-item{
+      display:grid;
+      grid-template-columns:auto 1fr auto auto;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      cursor:grab;
+    }
+    .signer-item.dragging{opacity:.55}
+    .signer-order{
+      width:26px;
+      height:26px;
+      border-radius:999px;
+      border:1px solid #ffe1b3;
+      background:#fff7e8;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      font-size:12px;
+    }
+    .signer-handle{
+      color:var(--muted);
+      font-size:16px;
+      user-select:none;
+    }
+    @media (max-width: 760px){
+      .signer-item{
+        grid-template-columns:auto 1fr auto;
+      }
+      .signer-handle{
+        display:none;
+      }
     }
   </style>
 {% endblock %}
@@ -68,19 +109,38 @@
       </div>
 
       <div class="field">
-        <label for="id_firmantes">Firmantes</label>
-        {{ form.firmantes }}
-        <div class="help">Escribe para buscar por nombre y apellido. Puedes seleccionar varios firmantes.</div>
-        {{ form.firmantes.errors }}
+        <label for="id_soy_firmante">Soy firmante</label>
+        <div class="field-inline-check">
+          {{ form.soy_firmante }}
+          <span class="help">Si está marcado, también te agregaremos como firmante de este documento.</span>
+        </div>
+        {{ form.soy_firmante.errors }}
       </div>
 
       <div class="field">
-        <label for="id_soy_firmante">Soy firmante</label>
-        <div style="display:flex;align-items:center;gap:10px">
-          {{ form.soy_firmante }}
-          <span class="help" style="margin:0">Si está marcado, también te agregaremos como firmante de este documento.</span>
+        <label for="signer-select">Firmantes (orden de firma)</label>
+        {{ form.ordered_signers }}
+        <div
+          class="signer-builder"
+          data-current-user-id="{{ request.user.id }}"
+          data-current-user-name="{{ request.user.get_full_name|default:request.user.username }}"
+        >
+          <div class="signer-builder-row">
+            <select id="signer-select">
+              <option value="">Selecciona un firmante…</option>
+              {% for signer in form.available_signers %}
+                {% if signer.id != request.user.id %}
+                  <option value="{{ signer.id }}">
+                    {{ signer.get_full_name|default:signer.username }}
+                  </option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <button class="btn btn-ghost" type="button" id="add-signer-btn">Agregar</button>
+          </div>
+          <ul id="signer-list" class="signer-list"></ul>
         </div>
-        {{ form.soy_firmante.errors }}
+        <div class="help">Agrega firmantes y ordénalos arrastrando. El puesto 1 firma primero.</div>
       </div>
 
       {% if form.non_field_errors %}
@@ -95,28 +155,131 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/i18n/es.js"></script>
   <script>
     (function () {
-      const $el = $('.js-select2-users');
-      if (!$el.length) return;
+      const select = document.getElementById('signer-select');
+      const addBtn = document.getElementById('add-signer-btn');
+      const list = document.getElementById('signer-list');
+      const hidden = document.getElementById('id_ordered_signers');
+      const soyFirmante = document.getElementById('id_soy_firmante');
+      const builder = document.querySelector('.signer-builder');
+      if (!select || !addBtn || !list || !hidden || !soyFirmante || !builder) return;
+      const currentUserId = builder.dataset.currentUserId;
+      const currentUserName = builder.dataset.currentUserName || 'Yo';
 
-      $el.select2({
-        width: '100%',
-        closeOnSelect: false,
-        placeholder: $el.data('placeholder') || 'Buscar y seleccionar firmantes…',
-        language: 'es',
-        matcher: function (params, data) {
-          // Búsqueda “contiene” case-insensitive sobre el texto visible (nombre completo)
-          if ($.trim(params.term) === '') return data;
-          if (typeof data.text === 'undefined') return null;
-          const term = params.term.toLowerCase();
-          const text = (data.text || '').toLowerCase();
-          return text.indexOf(term) > -1 ? data : null;
+      function syncHiddenInput() {
+        const ids = Array.from(list.querySelectorAll('.signer-item')).map((el) => parseInt(el.dataset.userId, 10));
+        hidden.value = JSON.stringify(ids);
+        Array.from(list.querySelectorAll('.signer-item')).forEach((el, index) => {
+          const badge = el.querySelector('.signer-order');
+          if (badge) badge.textContent = String(index + 1);
+        });
+      }
+
+      function createSignerItem(id, label, options) {
+        const isCurrentUser = Boolean(options && options.isCurrentUser);
+        const li = document.createElement('li');
+        li.className = 'signer-item';
+        li.draggable = true;
+        li.dataset.userId = id;
+        if (isCurrentUser) li.dataset.isCurrentUser = '1';
+        li.innerHTML = [
+          '<span class="signer-order"></span>',
+          '<span></span>',
+          '<span class="signer-handle" aria-hidden="true">&#x2630;</span>',
+          '<button class="btn btn-ghost" type="button">Quitar</button>'
+        ].join('');
+        li.querySelector('span:nth-child(2)').textContent = isCurrentUser ? (label + ' (Tú)') : label;
+        const removeBtn = li.querySelector('button');
+        if (isCurrentUser) {
+          removeBtn.textContent = 'Incluido';
+          removeBtn.disabled = true;
+          removeBtn.style.opacity = '0.6';
+          removeBtn.style.cursor = 'not-allowed';
+        } else {
+          removeBtn.addEventListener('click', function () {
+            li.remove();
+            syncHiddenInput();
+          });
+        }
+        li.addEventListener('dragstart', function () {
+          li.classList.add('dragging');
+        });
+        li.addEventListener('dragend', function () {
+          li.classList.remove('dragging');
+          syncHiddenInput();
+        });
+        return li;
+      }
+
+      function getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('.signer-item:not(.dragging)')];
+        return draggableElements.reduce(function (closest, child) {
+          const box = child.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+          }
+          return closest;
+        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+      }
+
+      addBtn.addEventListener('click', function () {
+        const id = select.value;
+        if (!id) return;
+        const exists = list.querySelector('.signer-item[data-user-id="' + id + '"]');
+        if (exists) return;
+        const option = select.options[select.selectedIndex];
+        const label = option ? option.text : id;
+        list.appendChild(createSignerItem(id, label, { isCurrentUser: false }));
+        syncHiddenInput();
+      });
+
+      list.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        const dragging = list.querySelector('.signer-item.dragging');
+        if (!dragging) return;
+        const after = getDragAfterElement(list, e.clientY);
+        if (!after) {
+          list.appendChild(dragging);
+        } else {
+          list.insertBefore(dragging, after);
         }
       });
+
+      if (hidden.value) {
+        try {
+          const ids = JSON.parse(hidden.value);
+          if (Array.isArray(ids)) {
+            ids.forEach(function (id) {
+              const idStr = String(id);
+              const option = select.querySelector('option[value="' + idStr + '"]');
+              if (option && !list.querySelector('.signer-item[data-user-id="' + idStr + '"]')) {
+                list.appendChild(createSignerItem(idStr, option.text, { isCurrentUser: false }));
+              }
+            });
+          }
+        } catch (err) {
+          hidden.value = '';
+        }
+      }
+
+      function syncCurrentUserInList() {
+        const existing = list.querySelector('.signer-item[data-user-id="' + currentUserId + '"]');
+        if (soyFirmante.checked) {
+          if (!existing) {
+            const selfItem = createSignerItem(currentUserId, currentUserName, { isCurrentUser: true });
+            list.insertBefore(selfItem, list.firstChild);
+          }
+        } else if (existing) {
+          existing.remove();
+        }
+        syncHiddenInput();
+      }
+
+      soyFirmante.addEventListener('change', syncCurrentUserInList);
+      syncCurrentUserInList();
+      syncHiddenInput();
     })();
   </script>
 {% endblock %}

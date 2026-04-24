@@ -71,8 +71,18 @@ class DocumentFlowTests(APITestCase):
             file=SimpleUploadedFile('m.pdf', b'%PDF', content_type='application/pdf'),
             uploaded_by=self.client_user,
         )
-        DocumentSignatory.objects.create(document=doc, user=self.client_user, status=DocumentSignatory.Status.PENDING)
-        DocumentSignatory.objects.create(document=doc, user=self.other_user, status=DocumentSignatory.Status.PENDING)
+        DocumentSignatory.objects.create(
+            document=doc,
+            user=self.client_user,
+            status=DocumentSignatory.Status.PENDING,
+            sign_order=1,
+        )
+        DocumentSignatory.objects.create(
+            document=doc,
+            user=self.other_user,
+            status=DocumentSignatory.Status.PENDING,
+            sign_order=2,
+        )
 
         self.authenticate('cliente', 'Pass12345!')
         r1 = self.client.post('/api/signatures/sign/', {'document': doc.id, 'signature_data': 'sig1'}, format='json')
@@ -105,7 +115,12 @@ class DocumentFlowTests(APITestCase):
             uploaded_by=self.client_user,
         )
 
-        DocumentSignatory.objects.create(document=doc, user=self.other_user, status=DocumentSignatory.Status.PENDING)
+        DocumentSignatory.objects.create(
+            document=doc,
+            user=self.other_user,
+            status=DocumentSignatory.Status.PENDING,
+            sign_order=1,
+        )
 
         self.assertEqual(len(mail.outbox), 1)
         sent = mail.outbox[0]
@@ -125,5 +140,38 @@ class DocumentFlowTests(APITestCase):
             uploaded_by=self.client_user,
         )
 
-        DocumentSignatory.objects.create(document=doc, user=self.other_user, status=DocumentSignatory.Status.PENDING)
+        DocumentSignatory.objects.create(
+            document=doc,
+            user=self.other_user,
+            status=DocumentSignatory.Status.PENDING,
+            sign_order=1,
+        )
         self.assertEqual(len(mail.outbox), 0)
+
+    def test_sign_rejected_when_not_signing_turn(self):
+        doc = Document.objects.create(
+            title='Orden firmado',
+            description='Desc',
+            file=SimpleUploadedFile('orden.pdf', b'%PDF', content_type='application/pdf'),
+            uploaded_by=self.client_user,
+        )
+        DocumentSignatory.objects.create(
+            document=doc,
+            user=self.other_user,
+            status=DocumentSignatory.Status.PENDING,
+            sign_order=1,
+        )
+        DocumentSignatory.objects.create(
+            document=doc,
+            user=self.client_user,
+            status=DocumentSignatory.Status.PENDING,
+            sign_order=2,
+        )
+
+        self.authenticate('cliente', 'Pass12345!')
+        response = self.client.post('/api/signatures/sign/', {
+            'document': doc.id,
+            'signature_data': 'base64-data',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Aún no es tu turno de firma', str(response.data))

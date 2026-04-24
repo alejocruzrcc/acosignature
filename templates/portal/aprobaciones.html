@@ -16,20 +16,27 @@
     <section class="card" style="margin-top:14px">
       <div class="h2">Pendientes por tu firma</div>
       <div style="display:grid;gap:10px;margin-top:10px">
-        {% for d in pending_for_me %}
+        {% for row in pending_for_me %}
+          {% with d=row.document %}
           <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border:1px solid var(--line);border-radius:16px;padding:12px">
             <div>
               <div style="font-weight:900">{{ d.title }}</div>
               <div style="font-size:12px;color:var(--muted);margin-top:4px">
                 Creado por {{ d.uploaded_by.username }} · {{ d.created_at|date:"Y-m-d H:i" }}
               </div>
+              {% if d.status == "pending" and row.pending_by %}
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">
+                  Pendiente por firma de: <strong>{{ row.pending_by }}</strong>
+                </div>
+              {% endif %}
             </div>
             <div style="display:flex;gap:10px;align-items:center">
               <span class="pill pill-pending">Pendiente</span>
               <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
-              <a class="btn btn-ghost" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
+              <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
             </div>
           </div>
+          {% endwith %}
         {% endfor %}
       </div>
     </section>
@@ -56,12 +63,23 @@
                 <div style="font-size:12px;color:var(--muted);margin-top:4px">
                   Por {{ d.uploaded_by.username }} · {{ d.created_at|date:"Y-m-d H:i" }}
                 </div>
+                {% if d.status == "pending" and row.pending_by %}
+                  <div style="font-size:12px;color:var(--muted);margin-top:4px">
+                    Pendiente por firma de: <strong>{{ row.pending_by }}</strong>
+                  </div>
+                {% elif d.status == "rejected" and row.rejected_by %}
+                  <div style="font-size:12px;color:#7f1d1d;margin-top:4px">
+                    Rechazado por: <strong>{{ row.rejected_by }}</strong>
+                  </div>
+                {% endif %}
               </td>
               <td>
                 {% if d.status == "approved" %}
                   <span class="pill pill-doc-approved pill-signed">Aprobado</span>
                 {% elif d.status == "pending" %}
                   <span class="pill pill-doc-pending pill-pending">Pendiente</span>
+                {% elif d.status == "rejected" %}
+                  <span class="pill pill-rejected">Rechazado</span>
                 {% else %}
                   <span class="pill">{{ d.get_status_display }}</span>
                 {% endif %}
@@ -81,7 +99,9 @@
                 {% endif %}
                 {% if row.needs_my_signature %}
                   <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
-                  <a class="btn btn-ghost" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
+                  <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
+                {% elif row.waiting_turn %}
+                  <span class="pill pill-pending">En espera de turno</span>
                 {% endif %}
               </td>
             </tr>

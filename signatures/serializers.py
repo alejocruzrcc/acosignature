@@ -32,7 +32,10 @@ class SignatureSerializer(serializers.ModelSerializer):
                 'is_valid': True,
             },
         )
-        WorkflowService.sign_document(signature.document, request.user, ip_address=client_ip)
+        try:
+            WorkflowService.sign_document(signature.document, request.user, ip_address=client_ip)
+        except ValueError as exc:
+            raise serializers.ValidationError({'document': str(exc)}) from exc
         return signature
 
     @staticmethod

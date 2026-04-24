@@ -1,4 +1,5 @@
 import os
+import json
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -21,18 +22,12 @@ class UserModelMultipleChoiceField(forms.ModelMultipleChoiceField):
 class DocumentCreateForm(forms.ModelForm):
     soy_firmante = forms.BooleanField(
         required=False,
-        initial=False,
+        initial=True,
         label='Soy firmante',
     )
-    firmantes = UserModelMultipleChoiceField(
-        queryset=User.objects.none(),
-        required=True,
-        widget=forms.SelectMultiple(
-            attrs={
-                'class': 'js-select2-users',
-                'data-placeholder': 'Buscar y seleccionar firmantes…',
-            }
-        ),
+    ordered_signers = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
     )
 
     class Meta:
@@ -44,9 +39,8 @@ class DocumentCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         qs = User.objects.filter(is_active=True).order_by('last_name', 'first_name', 'username')
-        if uploader:
-            qs = qs.exclude(pk=uploader.pk)
-        self.fields['firmantes'].queryset = qs
+        self.available_signers = list(qs)
+        self.uploader = uploader
 
     def clean_file(self):
         file = self.cleaned_data['file']
@@ -57,18 +51,59 @@ class DocumentCreateForm(forms.ModelForm):
             raise forms.ValidationError('Solo se permiten archivos PDF.')
         return file
 
-    def clean_firmantes(self):
-        users = self.cleaned_data['firmantes']
-        uploader = self.initial.get('uploader')
-        soy_firmante = self.cleaned_data.get('soy_firmante', False)
-        if uploader and any(u.id == uploader.id for u in users) and not soy_firmante:
-            raise forms.ValidationError('Si deseas incluirte, marca la opción "Soy firmante".')
+    def clean(self):
+        cleaned_data = super().clean()
+        raw_ordered_signers = (cleaned_data.get('ordered_signers') or '').strip()
+        selected_ids = []
+        if raw_ordered_signers:
+            try:
+                parsed = json.loads(raw_ordered_signers)
+            except json.JSONDecodeError as exc:
+                raise forms.ValidationError('No se pudo interpretar el orden de firmantes.') from exc
+            if not isinstance(parsed, list):
+                raise forms.ValidationError('El orden de firmantes debe ser una lista válida.')
+            try:
+                selected_ids = [int(value) for value in parsed]
+            except (TypeError, ValueError) as exc:
+                raise forms.ValidationError('El orden de firmantes contiene valores inválidos.') from exc
+
+        if len(selected_ids) != len(set(selected_ids)):
+            raise forms.ValidationError('No puedes repetir firmantes en la lista.')
+
+        uploader = self.uploader
+        soy_firmante = cleaned_data.get('soy_firmante', False)
+        if uploader:
+            if soy_firmante and uploader.id not in selected_ids:
+                selected_ids.insert(0, uploader.id)
+            if not soy_firmante:
+                selected_ids = [user_id for user_id in selected_ids if user_id != uploader.id]
+
+        allowed_ids = {u.id for u in self.available_signers}
+        invalid_ids = [user_id for user_id in selected_ids if user_id not in allowed_ids]
+        if invalid_ids:
+            raise forms.ValidationError('Hay firmantes inválidos en el orden seleccionado.')
+
+        user_map = {u.id: u for u in self.available_signers}
+        users = [user_map[user_id] for user_id in selected_ids]
+
         if not users:
-            raise forms.ValidationError('Selecciona al menos un firmante.')
-        return users
+            raise forms.ValidationError('Debes definir al menos un firmante para el documento.')
+
+        cleaned_data['firmantes'] = users
+        return cleaned_data
 
 
 class SignatureCaptureForm(forms.Form):
+    ALLOWED_UPLOAD_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'}
+    ALLOWED_UPLOAD_CONTENT_TYPES = {
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'image/bmp',
+    }
+
     class SignatureMode(models.TextChoices):
         DRAW = 'draw', 'Dibujar firma'
         SAVED = 'saved', 'Usar firma guardada'
@@ -98,6 +133,19 @@ class SignatureCaptureForm(forms.Form):
 
         if mode == self.SignatureMode.UPLOAD and not signature_upload:
             self.add_error('signature_upload', 'Selecciona una imagen de firma para continuar.')
+        elif mode == self.SignatureMode.UPLOAD and signature_upload:
+            ext = os.path.splitext((signature_upload.name or '').lower())[1]
+            content_type = (getattr(signature_upload, 'content_type', '') or '').lower()
+            if ext not in self.ALLOWED_UPLOAD_EXTENSIONS:
+                self.add_error(
+                    'signature_upload',
+                    'Formato no permitido. Usa JPG, JPEG, PNG, WEBP, GIF o BMP.',
+                )
+            elif content_type and content_type not in self.ALLOWED_UPLOAD_CONTENT_TYPES:
+                self.add_error(
+                    'signature_upload',
+                    'Tipo de archivo no válido. Usa JPG, JPEG, PNG, WEBP, GIF o BMP.',
+                )
 
         return cleaned_data
 

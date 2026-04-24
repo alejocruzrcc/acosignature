@@ -44,14 +44,9 @@ def _build_signatures_page(document) -> bytes:
     y = height - margin_y
     c.setFont('Helvetica-Bold', 14)
     c.drawString(margin_x, y, 'Hoja de firmas')
-    y -= 22
-    c.setFont('Helvetica', 10)
-    c.drawString(margin_x, y, f'Documento: {document.title}')
-    y -= 18
-    c.drawString(margin_x, y, f'ID: {document.id}')
     y -= 24
 
-    row_height = 128
+    row_height = 142
     signature_box_w = 200
     signature_box_h = 72
 
@@ -65,6 +60,7 @@ def _build_signatures_page(document) -> bytes:
 
         user = sig.user
         full_name = (user.get_full_name() or user.username).strip()
+        cargo = (user.cargo or 'N/D').strip()
         doc_number = user.document_number or 'N/D'
 
         c.setFont('Helvetica-Bold', 11)
@@ -73,6 +69,8 @@ def _build_signatures_page(document) -> bytes:
 
         c.setFont('Helvetica', 10)
         c.drawString(margin_x, y, f'Nombre: {full_name}')
+        y -= 14
+        c.drawString(margin_x, y, f'Cargo: {cargo}')
         y -= 14
         c.drawString(margin_x, y, f'Documento: {doc_number}')
         y -= 14

@@ -11,9 +11,9 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Volver</a>
-      {% if my_signatory and my_signatory.status == "pending" %}
+      {% if my_signatory and my_signatory.status == "pending" and is_my_turn %}
         <a class="btn btn-primary" href="{% url 'portal_approve_entry' document.id %}">Aprobar</a>
-        <a class="btn btn-ghost" href="{% url 'portal_reject_entry' document.id %}">Rechazar</a>
+        <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' document.id %}">Rechazar</a>
       {% endif %}
     </div>
   </div>
@@ -41,6 +41,17 @@
         <label>Requiere firma</label>
         <div>{{ document.requires_signature|yesno:"Sí,No" }}</div>
       </div>
+      {% if document.status == "pending" and current_pending_signatory %}
+        <div class="field">
+          <label>Turno actual</label>
+          <div>Pendiente por firma de <strong>{{ current_pending_signatory.user.get_full_name|default:current_pending_signatory.user.username }}</strong></div>
+        </div>
+      {% elif document.status == "rejected" and rejected_signatory %}
+        <div class="field">
+          <label>Rechazo</label>
+          <div style="color:#7f1d1d">Rechazado por <strong>{{ rejected_signatory.user.get_full_name|default:rejected_signatory.user.username }}</strong></div>
+        </div>
+      {% endif %}
     </div>
 
     <div class="card">
@@ -52,6 +63,7 @@
       <table class="table">
         <thead>
           <tr>
+            <th>Orden</th>
             <th>Firmante</th>
             <th>Estado</th>
           </tr>
@@ -59,24 +71,31 @@
         <tbody>
           {% for s in document.signatories.all %}
             <tr>
+              <td style="font-weight:800">{{ s.sign_order }}</td>
               <td style="font-weight:800">{{ s.user.username }}</td>
               <td>
                 {% if s.status == "signed" %}
                   <span class="pill pill-signed">Firmado</span>
                 {% elif s.status == "rejected" %}
-                  <span class="pill pill-pending" style="border-color:#fecaca;background:#fff1f2;color:#991b1b">Rechazado</span>
+                  <span class="pill pill-rejected">Rechazado</span>
                   {% if s.rejection_reason %}
                     <div style="margin-top:6px;font-size:12px;color:#7f1d1d;line-height:1.4">
                       Motivo: {{ s.rejection_reason }}
                     </div>
                   {% endif %}
                 {% else %}
-                  <span class="pill pill-pending">Pendiente</span>
+                  {% if document.status == "rejected" and rejected_signatory %}
+                    <span class="pill pill-rejected">Rechazado por {{ rejected_signatory.user.username }}</span>
+                  {% elif current_pending_signatory and current_pending_signatory.id == s.id and document.status == "pending" %}
+                    <span class="pill pill-pending">Pendiente (turno actual)</span>
+                  {% else %}
+                    <span class="pill pill-pending">Pendiente</span>
+                  {% endif %}
                 {% endif %}
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="2" style="color:var(--muted)">No hay firmantes asignados.</td></tr>
+            <tr><td colspan="3" style="color:var(--muted)">No hay firmantes asignados.</td></tr>
           {% endfor %}
         </tbody>
       </table>

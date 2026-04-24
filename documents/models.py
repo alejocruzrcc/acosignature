@@ -24,6 +24,12 @@ class Document(models.Model):
         verbose_name = 'Documento'
         verbose_name_plural = 'Documentos'
 
+    def current_pending_signatory(self):
+        return self.signatories.filter(status=DocumentSignatory.Status.PENDING).order_by('sign_order', 'id').first()
+
+    def rejected_signatory(self):
+        return self.signatories.filter(status=DocumentSignatory.Status.REJECTED).select_related('user').order_by('rejected_at', 'id').first()
+
 
 class DocumentSignatory(models.Model):
     class Status(models.TextChoices):
@@ -33,6 +39,7 @@ class DocumentSignatory(models.Model):
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='signatories')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='document_signatories')
+    sign_order = models.PositiveIntegerField(default=1)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     rejection_reason = models.TextField(blank=True)
     rejected_at = models.DateTimeField(null=True, blank=True)
@@ -41,7 +48,10 @@ class DocumentSignatory(models.Model):
 
     class Meta:
         unique_together = ('document', 'user')
-        ordering = ('id',)
+        constraints = [
+            models.UniqueConstraint(fields=('document', 'sign_order'), name='uniq_document_sign_order'),
+        ]
+        ordering = ('sign_order', 'id')
         verbose_name = 'Firmante del documento'
         verbose_name_plural = 'Firmantes del documento'
 
