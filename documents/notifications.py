@@ -49,16 +49,25 @@ def send_signatory_assignment_email(signatory) -> None:
         'document_url': document_url,
     }
 
-    subject = f'Nuevo documento asignado para firma: {document.title}'
-    text_body = render_to_string('emails/signatory_assigned.txt', context)
-    html_body = render_to_string('emails/signatory_assigned.html', context)
+    try:
+        subject = f'Nuevo documento asignado para firma: {document.title}'
+        text_body = render_to_string('emails/signatory_assigned.txt', context)
+        html_body = render_to_string('emails/signatory_assigned.html', context)
 
-    message = EmailMultiAlternatives(
-        subject=subject,
-        body=text_body,
-        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-        to=[recipient],
-    )
-    message.attach_alternative(html_body, 'text/html')
-    message.send(fail_silently=False)
+        message = EmailMultiAlternatives(
+            subject=subject,
+            body=text_body,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+            to=[recipient],
+        )
+        message.attach_alternative(html_body, 'text/html')
+        message.send(fail_silently=False)
+    except Exception:
+        # El correo es un efecto secundario: no debe interrumpir el flujo de negocio.
+        logger.exception(
+            'Fallo al enviar notificación de firmante. document_id=%s user_id=%s recipient=%s',
+            signatory.document_id,
+            signatory.user_id,
+            recipient,
+        )
 

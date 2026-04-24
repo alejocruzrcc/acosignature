@@ -1,9 +1,12 @@
 from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+import logging
 
 from .models import DocumentSignatory
 from .notifications import send_signatory_assignment_email
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=DocumentSignatory)
@@ -12,5 +15,16 @@ def notify_signatory_assignment(sender, instance: DocumentSignatory, created: bo
         return
 
     # Evita envíos si la transacción principal falla/rollback.
-    transaction.on_commit(lambda: send_signatory_assignment_email(instance))
+    def _send_notification():
+        try:
+            send_signatory_assignment_email(instance)
+        except Exception:
+            # Defensa adicional: jamás bloquear la transacción ya confirmada.
+            logger.exception(
+                'Fallo inesperado en callback de notificación. document_id=%s user_id=%s',
+                instance.document_id,
+                instance.user_id,
+            )
+
+    transaction.on_commit(_send_notification)
 
