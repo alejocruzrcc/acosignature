@@ -1,0 +1,14 @@
+Hola {{ recipient_name }},
+
+Se te asigno un nuevo documento para firma.
+
+Documento: {{ document_title }}
+ID: {{ document_id }}
+Asignado por: {{ assigned_by_name }}
+{% if document_description %}
+Descripcion: {{ document_description }}
+{% endif %}
+Revisa el documento aqui:
+{{ document_url }}
+
+Si no reconoces este correo, puedes ignorarlo.

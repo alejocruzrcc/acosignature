@@ -9,7 +9,6 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.db import transaction
-from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -23,6 +22,12 @@ from .forms import DocumentCreateForm, RejectionReasonForm, SignatureCaptureForm
 
 def home(request):
     return render(request, 'portal/home.html')
+
+
+def _can_access_document(user, document: Document):
+    if user.role in {user.Roles.ADMIN, user.Roles.REVIEWER}:
+        return True
+    return document.signatories.filter(user=user).exists()
 
 
 @login_required
@@ -80,13 +85,11 @@ def _file_to_data_url(file_obj, fallback_name='firma.png'):
 
 @login_required
 def approvals_index(request):
-    documents = (
-        Document.objects.filter(Q(uploaded_by=request.user) | Q(signatories__user=request.user))
-        .select_related('uploaded_by')
-        .prefetch_related('signatories__user', 'signatures__user')
-        .distinct()
-        .order_by('-created_at')
-    )
+    documents = Document.objects.select_related('uploaded_by').prefetch_related('signatories__user', 'signatures__user')
+    if request.user.role == request.user.Roles.CLIENT:
+        documents = documents.filter(signatories__user=request.user).distinct()
+    else:
+        documents = documents.order_by('-created_at')
 
     rows = []
     pending_for_me = []
@@ -144,7 +147,7 @@ def document_detail(request, pk: int):
         pk=pk,
     )
 
-    if not document.signatories.filter(user=request.user).exists() and document.uploaded_by_id != request.user.id:
+    if not _can_access_document(request.user, document):
         return HttpResponseForbidden('No tienes acceso a este documento.')
 
     my_signatory = _signatory_for(request.user, document)
@@ -161,7 +164,7 @@ def document_detail(request, pk: int):
 @login_required
 def document_pdf(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
-    if not document.signatories.filter(user=request.user).exists() and document.uploaded_by_id != request.user.id:
+    if not _can_access_document(request.user, document):
         return HttpResponseForbidden('No tienes acceso a este documento.')
 
     file_field = document.signed_file if document.signed_file else document.file
@@ -184,7 +187,7 @@ def document_pdf(request, pk: int):
 @login_required
 def document_signed_download(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
-    if not document.signatories.filter(user=request.user).exists() and document.uploaded_by_id != request.user.id:
+    if not _can_access_document(request.user, document):
         return HttpResponseForbidden('No tienes acceso a este documento.')
 
     if not document.signed_file:

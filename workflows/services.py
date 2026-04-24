@@ -19,7 +19,7 @@ class WorkflowService:
 
     @staticmethod
     def sign_document(document: Document, actor: User, ip_address=None):
-        if actor.role not in {User.Roles.ADMIN, User.Roles.CLIENT}:
+        if actor.role not in {User.Roles.ADMIN, User.Roles.REVIEWER, User.Roles.CLIENT}:
             raise ValueError('Rol sin permisos para firmar.')
         if document.status in {Document.Status.APPROVED, Document.Status.REJECTED}:
             raise ValueError('Documento en estado final, no se puede firmar.')

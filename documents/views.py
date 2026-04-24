@@ -24,7 +24,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         if user.role in {User.Roles.ADMIN, User.Roles.REVIEWER}:
             return qs
-        return qs.filter(uploaded_by=user)
+        return qs.filter(signatories__user=user).distinct()
 
     def perform_create(self, serializer):
         serializer.save(uploaded_by=self.request.user, status=Document.Status.PENDING)

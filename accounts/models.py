@@ -13,7 +13,6 @@ class User(AbstractUser):
     cargo = models.CharField(max_length=120, blank=True)
     signature_image = models.ImageField(upload_to='user_signatures/', blank=True, null=True)
     role = models.CharField(max_length=20, choices=Roles.choices, default=Roles.CLIENT)
-    is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

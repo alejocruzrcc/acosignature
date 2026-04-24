@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -83,3 +85,45 @@ class DocumentFlowTests(APITestCase):
         doc.refresh_from_db()
         self.assertEqual(r2.status_code, status.HTTP_201_CREATED)
         self.assertEqual(doc.status, Document.Status.APPROVED)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='no-reply@test.local',
+        PORTAL_BASE_URL='https://portal.example.com',
+        SIGNATORY_ASSIGNMENT_EMAIL_ENABLED=True,
+    )
+    def test_signatory_assignment_sends_email(self):
+        self.client_user.email = 'cliente@example.com'
+        self.client_user.save(update_fields=['email'])
+        self.other_user.email = 'firmante2@example.com'
+        self.other_user.save(update_fields=['email'])
+
+        doc = Document.objects.create(
+            title='Contrato NDA',
+            description='Revision de clausulas',
+            file=SimpleUploadedFile('nda.pdf', b'%PDF', content_type='application/pdf'),
+            uploaded_by=self.client_user,
+        )
+
+        DocumentSignatory.objects.create(document=doc, user=self.other_user, status=DocumentSignatory.Status.PENDING)
+
+        self.assertEqual(len(mail.outbox), 1)
+        sent = mail.outbox[0]
+        self.assertEqual(sent.to, ['firmante2@example.com'])
+        self.assertIn('Contrato NDA', sent.subject)
+        self.assertIn('https://portal.example.com/aprobaciones/', sent.body)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        SIGNATORY_ASSIGNMENT_EMAIL_ENABLED=True,
+    )
+    def test_signatory_assignment_without_email_does_not_send(self):
+        doc = Document.objects.create(
+            title='Contrato',
+            description='Desc',
+            file=SimpleUploadedFile('doc.pdf', b'%PDF', content_type='application/pdf'),
+            uploaded_by=self.client_user,
+        )
+
+        DocumentSignatory.objects.create(document=doc, user=self.other_user, status=DocumentSignatory.Status.PENDING)
+        self.assertEqual(len(mail.outbox), 0)
