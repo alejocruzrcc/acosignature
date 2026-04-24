@@ -53,15 +53,20 @@
     }
     .signer-handle{
       color:var(--muted);
-      font-size:16px;
+      font-size:20px;
       user-select:none;
+      touch-action:none;
+      padding:4px 6px;
+      border-radius:8px;
     }
     @media (max-width: 760px){
       .signer-item{
         grid-template-columns:auto 1fr auto;
       }
       .signer-handle{
-        display:none;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
       }
     }
   </style>
@@ -155,6 +160,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
   <script>
     (function () {
       const select = document.getElementById('signer-select');
@@ -180,7 +186,6 @@
         const isCurrentUser = Boolean(options && options.isCurrentUser);
         const li = document.createElement('li');
         li.className = 'signer-item';
-        li.draggable = true;
         li.dataset.userId = id;
         if (isCurrentUser) li.dataset.isCurrentUser = '1';
         li.innerHTML = [
@@ -202,26 +207,7 @@
             syncHiddenInput();
           });
         }
-        li.addEventListener('dragstart', function () {
-          li.classList.add('dragging');
-        });
-        li.addEventListener('dragend', function () {
-          li.classList.remove('dragging');
-          syncHiddenInput();
-        });
         return li;
-      }
-
-      function getDragAfterElement(container, y) {
-        const draggableElements = [...container.querySelectorAll('.signer-item:not(.dragging)')];
-        return draggableElements.reduce(function (closest, child) {
-          const box = child.getBoundingClientRect();
-          const offset = y - box.top - box.height / 2;
-          if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-          }
-          return closest;
-        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
       }
 
       addBtn.addEventListener('click', function () {
@@ -235,17 +221,19 @@
         syncHiddenInput();
       });
 
-      list.addEventListener('dragover', function (e) {
-        e.preventDefault();
-        const dragging = list.querySelector('.signer-item.dragging');
-        if (!dragging) return;
-        const after = getDragAfterElement(list, e.clientY);
-        if (!after) {
-          list.appendChild(dragging);
-        } else {
-          list.insertBefore(dragging, after);
-        }
-      });
+      if (window.Sortable) {
+        Sortable.create(list, {
+          animation: 160,
+          handle: '.signer-handle',
+          ghostClass: 'dragging',
+          chosenClass: 'dragging',
+          fallbackOnBody: true,
+          forceFallback: false,
+          onEnd: function () {
+            syncHiddenInput();
+          }
+        });
+      }
 
       if (hidden.value) {
         try {

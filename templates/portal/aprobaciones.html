@@ -18,8 +18,8 @@
       <div style="display:grid;gap:10px;margin-top:10px">
         {% for row in pending_for_me %}
           {% with d=row.document %}
-          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border:1px solid var(--line);border-radius:16px;padding:12px">
-            <div>
+          <div class="list-card">
+            <div class="list-card-main">
               <div style="font-weight:900">{{ d.title }}</div>
               <div style="font-size:12px;color:var(--muted);margin-top:4px">
                 Creado por {{ d.uploaded_by.username }} · {{ d.created_at|date:"Y-m-d H:i" }}
@@ -30,10 +30,12 @@
                 </div>
               {% endif %}
             </div>
-            <div style="display:flex;gap:10px;align-items:center">
+            <div class="list-card-actions">
               <span class="pill pill-pending">Pendiente</span>
-              <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
-              <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
+              <div class="list-card-buttons">
+                <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
+                <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
+              </div>
             </div>
           </div>
           {% endwith %}
@@ -92,17 +94,19 @@
                   {% if d.uploaded_by_id == request.user.id %}·{% endif %}Firmante
                 {% endif %}
               </td>
-              <td style="text-align:right;white-space:nowrap">
-                <a class="btn btn-ghost" href="{% url 'portal_document_detail' d.id %}">Ver</a>
-                {% if d.signed_file %}
-                  <a class="btn btn-ghost" href="{% url 'portal_document_signed_download' d.id %}">Descargar firmado</a>
-                {% endif %}
-                {% if row.needs_my_signature %}
-                  <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
-                  <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
-                {% elif row.waiting_turn %}
-                  <span class="pill pill-pending">En espera de turno</span>
-                {% endif %}
+              <td>
+                <div class="table-actions">
+                  <a class="btn btn-ghost" href="{% url 'portal_document_detail' d.id %}">Ver</a>
+                  {% if d.signed_file %}
+                    <a class="btn btn-ghost" href="{% url 'portal_document_signed_download' d.id %}">Descargar firmado</a>
+                  {% endif %}
+                  {% if row.needs_my_signature %}
+                    <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
+                    <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
+                  {% elif row.waiting_turn %}
+                    <span class="pill pill-pending">En espera de turno</span>
+                  {% endif %}
+                </div>
               </td>
             </tr>
             {% endwith %}
