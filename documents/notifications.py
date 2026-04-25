@@ -18,6 +18,17 @@ def _build_document_url(document_id: int) -> str:
     return urljoin(f'{base_url}/', path.lstrip('/'))
 
 
+def _build_brand_logo_url() -> str:
+    """
+    URL absoluta del logo para correos (los clientes no resuelven {% static %}).
+    """
+    base_url = getattr(settings, 'PORTAL_BASE_URL', '').strip()
+    static_path = 'static/portal/brand-logo.png?v=20260424c'
+    if not base_url:
+        return f'/{static_path}'
+    return urljoin(f'{base_url}/', static_path)
+
+
 def send_signatory_assignment_email(signatory) -> None:
     """
     Notifica por correo cuando un usuario es asignado como firmante.
@@ -39,14 +50,15 @@ def send_signatory_assignment_email(signatory) -> None:
     uploader_name = (uploader.get_full_name() or uploader.username).strip()
     recipient_name = (signatory.user.get_full_name() or signatory.user.username).strip()
     document_url = _build_document_url(document.id)
+    brand_logo_url = _build_brand_logo_url()
 
     context = {
         'recipient_name': recipient_name,
         'document_title': document.title,
         'document_description': document.description,
-        'document_id': document.id,
         'assigned_by_name': uploader_name,
         'document_url': document_url,
+        'brand_logo_url': brand_logo_url,
     }
 
     try:

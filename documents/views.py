@@ -21,7 +21,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = super().get_queryset()
+        qs = super().get_queryset().filter(archived_at__isnull=True)
         if user.role in {User.Roles.ADMIN, User.Roles.REVIEWER}:
             return qs
         return qs.filter(signatories__user=user).distinct()

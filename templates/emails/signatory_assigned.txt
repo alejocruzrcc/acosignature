@@ -2,8 +2,9 @@ Hola {{ recipient_name }},
 
 Se te asigno un nuevo documento para firma.
 
+Logo: {{ brand_logo_url }}
+
 Documento: {{ document_title }}
-ID: {{ document_id }}
 Asignado por: {{ assigned_by_name }}
 {% if document_description %}
 Descripcion: {{ document_description }}

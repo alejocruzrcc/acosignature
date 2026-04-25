@@ -1,0 +1,30 @@
+{% extends "base_portal.html" %}
+{% block title %}Documentos archivados · Constructora Indico{% endblock %}
+{% block content %}
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+      <div class="h2">Bandeja</div>
+      <h1 class="h1">Documentos archivados</h1>
+      <p style="margin:0;color:var(--muted);max-width:720px;line-height:1.6">
+        Aquí aparecen los documentos que marcaste como archivados (aprobados, firmados o rechazados).
+      </p>
+    </div>
+    <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Volver a aprobaciones</a>
+  </div>
+
+  <section class="card" style="margin-top:14px">
+    <div class="doc-card-list">
+      {% for row in rows %}
+        {% include "portal/_doc_card.html" with row=row show_archive=False %}
+      {% empty %}
+        <p style="margin:0;color:var(--muted)">No hay documentos archivados.</p>
+      {% endfor %}
+    </div>
+
+    {% if has_more and next_take %}
+      <div style="margin-top:14px">
+        <a class="btn btn-primary btn-block" href="{% url 'portal_archived_documents' %}?take={{ next_take }}">Ver más</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

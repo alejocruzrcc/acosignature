@@ -45,78 +45,16 @@
   {% endif %}
 
   <section class="card" style="margin-top:14px">
-    <div class="h2">Todos tus documentos relacionados</div>
-    <div style="overflow:auto;margin-top:10px">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Documento</th>
-            <th>Estado</th>
-            <th>Tu rol</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in rows %}
-            {% with d=row.document %}
-            <tr>
-              <td>
-                <div style="font-weight:900">{{ d.title }}</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:4px">
-                  Por {{ d.uploaded_by.username }} · {{ d.created_at|date:"Y-m-d H:i" }}
-                </div>
-                {% if d.status == "pending" and row.pending_by %}
-                  <div style="font-size:12px;color:var(--muted);margin-top:4px">
-                    Pendiente por firma de: <strong>{{ row.pending_by }}</strong>
-                  </div>
-                {% elif d.status == "rejected" and row.rejected_by %}
-                  <div style="font-size:12px;color:#7f1d1d;margin-top:4px">
-                    Rechazado por: <strong>{{ row.rejected_by }}</strong>
-                  </div>
-                {% endif %}
-              </td>
-              <td>
-                {% if d.status == "approved" %}
-                  <span class="pill pill-doc-approved pill-signed">Aprobado</span>
-                {% elif d.status == "pending" %}
-                  <span class="pill pill-doc-pending pill-pending">Pendiente</span>
-                {% elif d.status == "rejected" %}
-                  <span class="pill pill-rejected">Rechazado</span>
-                {% else %}
-                  <span class="pill">{{ d.get_status_display }}</span>
-                {% endif %}
-              </td>
-              <td style="font-size:13px;color:var(--muted)">
-                {% if d.uploaded_by_id == request.user.id %}
-                  Creador
-                {% endif %}
-                {% if row.my_signatory %}
-                  {% if d.uploaded_by_id == request.user.id %}·{% endif %}Firmante
-                {% endif %}
-              </td>
-              <td>
-                <div class="table-actions">
-                  <a class="btn btn-ghost" href="{% url 'portal_document_detail' d.id %}">Ver</a>
-                  {% if d.signed_file %}
-                    <a class="btn btn-ghost" href="{% url 'portal_document_signed_download' d.id %}">Descargar firmado</a>
-                  {% endif %}
-                  {% if row.needs_my_signature %}
-                    <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
-                    <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
-                  {% elif row.waiting_turn %}
-                    <span class="pill pill-pending">En espera de turno</span>
-                  {% endif %}
-                </div>
-              </td>
-            </tr>
-            {% endwith %}
-          {% empty %}
-            <tr>
-              <td colspan="4" style="color:var(--muted)">Aún no tienes documentos asignados.</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="h2" style="margin:0">Todos tus documentos relacionados</div>
+      <a class="btn btn-ghost" href="{% url 'portal_archived_documents' %}">Documentos archivados</a>
+    </div>
+    <div class="doc-card-list">
+      {% for row in rows %}
+        {% include "portal/_doc_card.html" with row=row show_archive=True %}
+      {% empty %}
+        <p style="margin:0;color:var(--muted)">Aún no tienes documentos asignados.</p>
+      {% endfor %}
     </div>
   </section>
 

@@ -1,0 +1,64 @@
+{% comment %}row, show_archive (bool){% endcomment %}
+{% with d=row.document %}
+<article class="doc-card">
+  <div class="doc-card-head">
+    <div class="doc-card-title">{{ d.title }}</div>
+    <div class="doc-card-status">
+      {% if d.status == "approved" %}
+        <span class="pill pill-doc-approved pill-signed">Aprobado</span>
+      {% elif d.status == "pending" %}
+        <span class="pill pill-doc-pending pill-pending">Pendiente</span>
+      {% elif d.status == "rejected" %}
+        <span class="pill pill-rejected">Rechazado</span>
+      {% else %}
+        <span class="pill">{{ d.get_status_display }}</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="doc-card-meta">
+    Por {{ d.uploaded_by.username }} · {{ d.created_at|date:"Y-m-d H:i" }}
+  </div>
+  {% if d.status == "pending" and row.pending_by %}
+    <div class="doc-card-meta">
+      Pendiente por firma de: <strong>{{ row.pending_by }}</strong>
+    </div>
+  {% elif d.status == "rejected" and row.rejected_by %}
+    <div class="doc-card-meta doc-card-warn">
+      Rechazado por: <strong>{{ row.rejected_by }}</strong>
+    </div>
+  {% endif %}
+  {% if d.archived_at %}
+    <div class="doc-card-meta">
+      Archivado{% if d.archived_by %} por {{ d.archived_by.username }}{% endif %} · {{ d.archived_at|date:"Y-m-d H:i" }}
+    </div>
+  {% endif %}
+  <div class="doc-card-role">
+    {% if d.uploaded_by_id == request.user.id %}
+      Creador
+    {% endif %}
+    {% if row.my_signatory %}
+      {% if d.uploaded_by_id == request.user.id %} · {% endif %}Firmante
+    {% endif %}
+  </div>
+  <div class="doc-card-actions">
+    <a class="btn btn-ghost" href="{% url 'portal_document_detail' d.id %}">Ver</a>
+    {% if d.signed_file %}
+      <a class="btn btn-ghost" href="{% url 'portal_document_signed_download' d.id %}">Descargar firmado</a>
+    {% endif %}
+    {% if row.needs_my_signature %}
+      <a class="btn btn-primary" href="{% url 'portal_approve_entry' d.id %}">Aprobar</a>
+      <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' d.id %}">Rechazar</a>
+    {% elif row.waiting_turn %}
+      <span class="pill pill-pending">En espera de turno</span>
+    {% endif %}
+    {% if show_archive and d.status != "pending" %}
+      {% if d.status == "approved" or d.status == "rejected" or d.status == "signed" %}
+        <form class="doc-card-archive-form" method="post" action="{% url 'portal_document_archive' d.id %}">
+          {% csrf_token %}
+          <button class="btn btn-ghost" type="submit">Archivar</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</article>
+{% endwith %}

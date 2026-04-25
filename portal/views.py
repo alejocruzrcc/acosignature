@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import math
 import mimetypes
 from urllib.parse import quote
 
@@ -9,10 +10,14 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
-from documents.models import Document
+from documents.models import Document, DocumentSignatory
 from documents.services import rebuild_signed_pdf
 from signatures.models import Signature
 from workflows.services import WorkflowService
@@ -28,6 +33,17 @@ def _can_access_document(user, document: Document):
     if user.role in {user.Roles.ADMIN, user.Roles.REVIEWER}:
         return True
     return document.signatories.filter(user=user).exists()
+
+
+def _forbidden_or_login(request, message: str):
+    """
+    Si no hay sesión, pide login y vuelve a la URL solicitada.
+    Si ya hay sesión, es falta de permisos: 403.
+    """
+    if not request.user.is_authenticated:
+        login_url = f"{reverse('login')}?next={quote(request.get_full_path())}"
+        return redirect(login_url)
+    return HttpResponseForbidden(message)
 
 
 @login_required
@@ -75,6 +91,40 @@ def _current_pending_signatory(document: Document):
     return document.signatories.filter(status='pending').select_related('user').order_by('sign_order', 'id').first()
 
 
+def _build_approval_row(user, document: Document) -> dict:
+    my_sig = next((s for s in document.signatories.all() if s.user_id == user.id), None)
+    current_pending = document.current_pending_signatory()
+    rejected_signatory = document.rejected_signatory()
+    is_my_turn = bool(
+        document.status == Document.Status.PENDING
+        and my_sig
+        and my_sig.status == 'pending'
+        and current_pending
+        and current_pending.user_id == user.id
+    )
+    return {
+        'document': document,
+        'my_signatory': my_sig,
+        'needs_my_signature': is_my_turn,
+        'pending_by': _display_user_name(current_pending.user) if current_pending else '',
+        'waiting_turn': bool(
+            my_sig
+            and my_sig.status == 'pending'
+            and not is_my_turn
+            and document.status == Document.Status.PENDING
+        ),
+        'rejected_by': _display_user_name(rejected_signatory.user) if rejected_signatory else '',
+    }
+
+
+def _normalize_archived_take(raw_take: int) -> int:
+    """Primera carga 15; siguientes +10 (+10, ...)."""
+    take = int(raw_take)
+    if take <= 15:
+        return 15
+    return 15 + math.ceil((take - 15) / 10) * 10
+
+
 def _file_to_data_url(file_obj, fallback_name='firma.png'):
     content_type = getattr(file_obj, 'content_type', None)
     if not content_type:
@@ -94,7 +144,11 @@ def _file_to_data_url(file_obj, fallback_name='firma.png'):
 
 @login_required
 def approvals_index(request):
-    documents = Document.objects.select_related('uploaded_by').prefetch_related('signatories__user', 'signatures__user')
+    documents = (
+        Document.objects.select_related('uploaded_by')
+        .prefetch_related('signatories__user', 'signatures__user')
+        .filter(archived_at__isnull=True)
+    )
     if request.user.role == request.user.Roles.CLIENT:
         documents = documents.filter(signatories__user=request.user).distinct()
     else:
@@ -103,24 +157,7 @@ def approvals_index(request):
     rows = []
     pending_for_me = []
     for d in documents:
-        my_sig = next((s for s in d.signatories.all() if s.user_id == request.user.id), None)
-        current_pending = d.current_pending_signatory()
-        rejected_signatory = d.rejected_signatory()
-        is_my_turn = bool(
-            d.status == Document.Status.PENDING
-            and my_sig
-            and my_sig.status == 'pending'
-            and current_pending
-            and current_pending.user_id == request.user.id
-        )
-        row = {
-            'document': d,
-            'my_signatory': my_sig,
-            'needs_my_signature': is_my_turn,
-            'pending_by': _display_user_name(current_pending.user) if current_pending else '',
-            'waiting_turn': bool(my_sig and my_sig.status == 'pending' and not is_my_turn and d.status == Document.Status.PENDING),
-            'rejected_by': _display_user_name(rejected_signatory.user) if rejected_signatory else '',
-        }
+        row = _build_approval_row(request.user, d)
         rows.append(row)
         if row['needs_my_signature'] and d.status == Document.Status.PENDING:
             pending_for_me.append(row)
@@ -133,6 +170,66 @@ def approvals_index(request):
             'pending_for_me': pending_for_me,
         },
     )
+
+
+@login_required
+def archived_documents_index(request):
+    take = _normalize_archived_take(int(request.GET.get('take', 15)))
+
+    documents = (
+        Document.objects.select_related('uploaded_by', 'archived_by')
+        .prefetch_related('signatories__user', 'signatures__user')
+        .filter(archived_at__isnull=False)
+    )
+    if request.user.role == request.user.Roles.CLIENT:
+        documents = documents.filter(
+            Exists(DocumentSignatory.objects.filter(document_id=OuterRef('pk'), user=request.user))
+        )
+    documents = documents.order_by('-archived_at', '-id')
+
+    slice_list = list(documents[: take + 1])
+    has_more = len(slice_list) > take
+    slice_list = slice_list[:take]
+
+    rows = [_build_approval_row(request.user, d) for d in slice_list]
+    next_take = take + 10 if has_more else None
+
+    return render(
+        request,
+        'portal/archivados.html',
+        {
+            'rows': rows,
+            'take': take,
+            'next_take': next_take,
+            'has_more': has_more,
+        },
+    )
+
+
+@login_required
+@require_POST
+def document_archive(request, pk: int):
+    document = get_object_or_404(Document, pk=pk)
+    if not _can_access_document(request.user, document):
+        return _forbidden_or_login(request, 'No tienes acceso a este documento.')
+
+    if document.archived_at:
+        messages.info(request, 'Este documento ya está archivado.')
+        return redirect('portal_approvals_index')
+
+    if document.status not in {
+        Document.Status.APPROVED,
+        Document.Status.REJECTED,
+        Document.Status.SIGNED,
+    }:
+        messages.error(request, 'Solo puedes archivar documentos aprobados, firmados o rechazados.')
+        return redirect('portal_approvals_index')
+
+    document.archived_at = timezone.now()
+    document.archived_by = request.user
+    document.save(update_fields=['archived_at', 'archived_by', 'updated_at'])
+    messages.success(request, 'Documento archivado.')
+    return redirect('portal_approvals_index')
 
 
 @login_required
@@ -169,7 +266,7 @@ def document_detail(request, pk: int):
     )
 
     if not _can_access_document(request.user, document):
-        return HttpResponseForbidden('No tienes acceso a este documento.')
+        return _forbidden_or_login(request, 'No tienes acceso a este documento.')
 
     my_signatory = _signatory_for(request.user, document)
     current_pending = _current_pending_signatory(document)
@@ -198,7 +295,7 @@ def document_detail(request, pk: int):
 def document_pdf(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
     if not _can_access_document(request.user, document):
-        return HttpResponseForbidden('No tienes acceso a este documento.')
+        return _forbidden_or_login(request, 'No tienes acceso a este documento.')
 
     file_field = document.signed_file if document.signed_file else document.file
     if not file_field:
@@ -221,7 +318,7 @@ def document_pdf(request, pk: int):
 def document_signed_download(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
     if not _can_access_document(request.user, document):
-        return HttpResponseForbidden('No tienes acceso a este documento.')
+        return _forbidden_or_login(request, 'No tienes acceso a este documento.')
 
     if not document.signed_file:
         raise Http404('Este documento aún no tiene versión firmada.')
@@ -236,7 +333,7 @@ def sign_flow_review(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
     signatory = _signatory_for(request.user, document)
     if not signatory:
-        return HttpResponseForbidden('No eres firmante de este documento.')
+        return _forbidden_or_login(request, 'No eres firmante de este documento.')
     if signatory.status == 'signed':
         messages.info(request, 'Ya finalizaste tu firma en este documento.')
         return redirect('portal_document_detail', pk=document.id)
@@ -270,7 +367,7 @@ def sign_flow_sign(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
     signatory = _signatory_for(request.user, document)
     if not signatory:
-        return HttpResponseForbidden('No eres firmante de este documento.')
+        return _forbidden_or_login(request, 'No eres firmante de este documento.')
     if signatory.status == 'signed':
         return redirect('portal_document_detail', pk=document.id)
     if signatory.status == 'rejected':
@@ -323,7 +420,7 @@ def sign_flow_finalize(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
     signatory = _signatory_for(request.user, document)
     if not signatory:
-        return HttpResponseForbidden('No eres firmante de este documento.')
+        return _forbidden_or_login(request, 'No eres firmante de este documento.')
     if signatory.status == 'signed':
         return redirect('portal_document_detail', pk=document.id)
     if signatory.status == 'rejected':
@@ -383,7 +480,7 @@ def approve_entry(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
     signatory = _signatory_for(request.user, document)
     if not signatory:
-        return HttpResponseForbidden('No eres firmante de este documento.')
+        return _forbidden_or_login(request, 'No eres firmante de este documento.')
     if signatory.status == 'signed':
         return redirect('portal_document_detail', pk=document.id)
     if signatory.status == 'rejected':
@@ -405,7 +502,7 @@ def reject_entry(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
     signatory = _signatory_for(request.user, document)
     if not signatory:
-        return HttpResponseForbidden('No eres firmante de este documento.')
+        return _forbidden_or_login(request, 'No eres firmante de este documento.')
     if signatory.status == 'signed':
         messages.info(request, 'Ya firmaste este documento, no puedes rechazarlo.')
         return redirect('portal_document_detail', pk=document.id)
