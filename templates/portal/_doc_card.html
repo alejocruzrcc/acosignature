@@ -59,6 +59,18 @@
         </form>
       {% endif %}
     {% endif %}
+    {% if row.can_delete %}
+      <button
+        class="btn btn-danger js-open-delete-modal"
+        type="button"
+        data-delete-action="{% url 'portal_document_delete' d.id %}"
+        data-document-title="{{ d.title|escape }}"
+      >
+        Eliminar
+      </button>
+    {% else %}
+      <span class="pill">{{ row.delete_block_reason }}</span>
+    {% endif %}
   </div>
 </article>
 {% endwith %}

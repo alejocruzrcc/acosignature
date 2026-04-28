@@ -27,4 +27,54 @@
       </div>
     {% endif %}
   </section>
+
+  <div id="delete-modal" class="modal-overlay" hidden>
+    <div class="modal-card">
+      <h3 style="margin:0 0 8px">Confirmar eliminación</h3>
+      <p id="delete-modal-text" style="margin:0;color:var(--muted);line-height:1.5">
+        Está seguro de eliminar este documento?
+      </p>
+      <form id="delete-modal-form" method="post" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+        {% csrf_token %}
+        <button class="btn btn-ghost" type="button" id="delete-modal-cancel">Cancelar</button>
+        <button class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" type="submit">Eliminar</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    (function () {
+      const modal = document.getElementById('delete-modal');
+      const modalText = document.getElementById('delete-modal-text');
+      const modalForm = document.getElementById('delete-modal-form');
+      const cancelBtn = document.getElementById('delete-modal-cancel');
+      if (!modal || !modalText || !modalForm || !cancelBtn) return;
+
+      function closeModal() {
+        modal.setAttribute('hidden', '');
+        modalForm.setAttribute('action', '#');
+      }
+
+      document.addEventListener('click', function (event) {
+        const trigger = event.target.closest('.js-open-delete-modal');
+        if (!trigger) return;
+        event.preventDefault();
+        const action = trigger.getAttribute('data-delete-action');
+        const title = trigger.getAttribute('data-document-title') || 'este documento';
+        modalForm.setAttribute('action', action || '#');
+        modalText.textContent = 'Está seguro de eliminar este documento? (' + title + ')';
+        modal.removeAttribute('hidden');
+      });
+
+      cancelBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', function (event) {
+        if (event.target === modal) closeModal();
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeModal();
+      });
+    })();
+  </script>
 {% endblock %}

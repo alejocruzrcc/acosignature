@@ -91,10 +91,17 @@ def _current_pending_signatory(document: Document):
     return document.signatories.filter(status='pending').select_related('user').order_by('sign_order', 'id').first()
 
 
+def _is_fully_signed(document: Document) -> bool:
+    signatories = list(document.signatories.all())
+    return bool(signatories) and all(s.status == DocumentSignatory.Status.SIGNED for s in signatories)
+
+
 def _build_approval_row(user, document: Document) -> dict:
-    my_sig = next((s for s in document.signatories.all() if s.user_id == user.id), None)
+    signatories = list(document.signatories.all())
+    my_sig = next((s for s in signatories if s.user_id == user.id), None)
     current_pending = document.current_pending_signatory()
     rejected_signatory = document.rejected_signatory()
+    fully_signed = bool(signatories) and all(s.status == DocumentSignatory.Status.SIGNED for s in signatories)
     is_my_turn = bool(
         document.status == Document.Status.PENDING
         and my_sig
@@ -114,6 +121,8 @@ def _build_approval_row(user, document: Document) -> dict:
             and document.status == Document.Status.PENDING
         ),
         'rejected_by': _display_user_name(rejected_signatory.user) if rejected_signatory else '',
+        'can_delete': not fully_signed,
+        'delete_block_reason': 'No se puede eliminar un documento ya firmado por todos.' if fully_signed else '',
     }
 
 
@@ -230,6 +239,28 @@ def document_archive(request, pk: int):
     document.save(update_fields=['archived_at', 'archived_by', 'updated_at'])
     messages.success(request, 'Documento archivado.')
     return redirect('portal_approvals_index')
+
+
+@login_required
+@require_POST
+def document_delete(request, pk: int):
+    document = get_object_or_404(Document, pk=pk)
+    if not _can_access_document(request.user, document):
+        return _forbidden_or_login(request, 'No tienes acceso a este documento.')
+    back_to_archived = '/aprobaciones/archivados/' in (request.META.get('HTTP_REFERER') or '')
+
+    if _is_fully_signed(document):
+        messages.error(request, 'No se puede eliminar un documento ya firmado por todos.')
+        return redirect('portal_archived_documents' if back_to_archived else 'portal_approvals_index')
+
+    title = document.title
+    if document.file:
+        document.file.delete(save=False)
+    if document.signed_file:
+        document.signed_file.delete(save=False)
+    document.delete()
+    messages.success(request, f'Documento "{title}" eliminado correctamente.')
+    return redirect('portal_archived_documents' if back_to_archived else 'portal_approvals_index')
 
 
 @login_required

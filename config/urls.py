@@ -21,6 +21,7 @@ urlpatterns = [
     path('aprobaciones/archivados/', portal_views.archived_documents_index, name='portal_archived_documents'),
     path('aprobaciones/nuevo/', portal_views.document_create, name='portal_document_create'),
     path('aprobaciones/<int:pk>/archivar/', portal_views.document_archive, name='portal_document_archive'),
+    path('aprobaciones/<int:pk>/eliminar/', portal_views.document_delete, name='portal_document_delete'),
     path('aprobaciones/<int:pk>/', portal_views.document_detail, name='portal_document_detail'),
     path('aprobaciones/<int:pk>/pdf/', portal_views.document_pdf, name='portal_document_pdf'),
     path('aprobaciones/<int:pk>/pdf-firmado/', portal_views.document_signed_download, name='portal_document_signed_download'),
