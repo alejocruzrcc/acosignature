@@ -1,7 +1,8 @@
+import logging
+import threading
 from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-import logging
 
 from .models import DocumentSignatory
 from .notifications import send_signatory_assignment_email
@@ -26,5 +27,6 @@ def notify_signatory_assignment(sender, instance: DocumentSignatory, created: bo
                 instance.user_id,
             )
 
-    transaction.on_commit(_send_notification)
+    # No bloquea la respuesta HTTP por latencia SMTP.
+    transaction.on_commit(lambda: threading.Thread(target=_send_notification, daemon=True).start())
 
