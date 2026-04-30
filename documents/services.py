@@ -110,6 +110,8 @@ def rebuild_signed_pdf(document) -> None:
     """
     if not document.file:
         raise ValueError('El documento no tiene archivo base.')
+    if not document.file.name or not document.file.storage.exists(document.file.name):
+        raise ValueError('No se encontró el archivo base del documento en el almacenamiento.')
 
     document.file.open('rb')
     original_reader = PdfReader(document.file)

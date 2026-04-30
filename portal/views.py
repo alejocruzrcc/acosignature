@@ -332,7 +332,10 @@ def document_pdf(request, pk: int):
     if not file_field:
         raise Http404()
 
-    file_field.open('rb')
+    try:
+        file_field.open('rb')
+    except FileNotFoundError:
+        raise Http404('El archivo del documento no está disponible en almacenamiento.')
     filename = file_field.name.split('/')[-1]
     resp = FileResponse(file_field, content_type='application/pdf', as_attachment=False)
     # iOS/Safari es sensible a headers y a incrustación en iframes; inline + filename ASCII/UTF-8 ayuda.
@@ -354,7 +357,10 @@ def document_signed_download(request, pk: int):
     if not document.signed_file:
         raise Http404('Este documento aún no tiene versión firmada.')
 
-    document.signed_file.open('rb')
+    try:
+        document.signed_file.open('rb')
+    except FileNotFoundError:
+        raise Http404('El PDF firmado no está disponible en almacenamiento.')
     filename = document.signed_file.name.split('/')[-1]
     return FileResponse(document.signed_file, content_type='application/pdf', as_attachment=True, filename=filename)
 
@@ -420,9 +426,16 @@ def sign_flow_sign(request, pk: int):
         if mode == SignatureCaptureForm.SignatureMode.DRAW:
             signature_data = form.cleaned_data['signature_data']
         elif mode == SignatureCaptureForm.SignatureMode.SAVED:
-            request.user.signature_image.open('rb')
-            signature_data = _file_to_data_url(request.user.signature_image, fallback_name='firma_guardada.png')
-            request.user.signature_image.close()
+            try:
+                request.user.signature_image.open('rb')
+                signature_data = _file_to_data_url(request.user.signature_image, fallback_name='firma_guardada.png')
+                request.user.signature_image.close()
+            except FileNotFoundError:
+                messages.error(
+                    request,
+                    'Tu firma guardada no está disponible en almacenamiento. Por favor dibuja o sube una firma nueva.',
+                )
+                return redirect('portal_sign_flow_sign', pk=document.id)
         else:
             uploaded = form.cleaned_data['signature_upload']
             signature_data = _file_to_data_url(uploaded, fallback_name=uploaded.name)
@@ -486,7 +499,11 @@ def sign_flow_finalize(request, pk: int):
             except ValueError as exc:
                 messages.error(request, str(exc))
                 return redirect('portal_document_detail', pk=document.id)
-            rebuild_signed_pdf(document)
+            try:
+                rebuild_signed_pdf(document)
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return redirect('portal_document_detail', pk=document.id)
 
         request.session.pop('pending_signature_data', None)
         messages.success(request, 'Firma registrada.')
