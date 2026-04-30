@@ -24,6 +24,9 @@
               <div style="font-size:12px;color:var(--muted);margin-top:4px">
                 Creado por {{ d.uploaded_by.username }} · {{ d.created_at|date:"Y-m-d H:i" }}
               </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px">
+                Categoría: <strong>{{ d.category }}</strong>
+              </div>
               {% if d.status == "pending" and row.pending_by %}
                 <div style="font-size:12px;color:var(--muted);margin-top:4px">
                   Pendiente por firma de: <strong>{{ row.pending_by }}</strong>

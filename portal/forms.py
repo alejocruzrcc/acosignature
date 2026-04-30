@@ -32,7 +32,7 @@ class DocumentCreateForm(forms.ModelForm):
 
     class Meta:
         model = Document
-        fields = ('title', 'description', 'file', 'requires_signature')
+        fields = ('title', 'category', 'description', 'file', 'requires_signature')
 
     def __init__(self, *args, **kwargs):
         uploader = kwargs.get('initial', {}).get('uploader') if kwargs.get('initial') else None

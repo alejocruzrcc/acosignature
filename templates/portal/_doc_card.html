@@ -18,6 +18,9 @@
   <div class="doc-card-meta">
     Por {{ d.uploaded_by.username }} · {{ d.created_at|date:"Y-m-d H:i" }}
   </div>
+  <div class="doc-card-meta">
+    Categoría: <strong>{{ d.category }}</strong>
+  </div>
   {% if d.status == "pending" and row.pending_by %}
     <div class="doc-card-meta">
       Pendiente por firma de: <strong>{{ row.pending_by }}</strong>

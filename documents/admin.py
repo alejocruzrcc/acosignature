@@ -10,12 +10,13 @@ class DocumentSignatoryInline(admin.TabularInline):
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title', 'uploaded_by', 'status', 'archived_at', 'requires_signature', 'created_at')
-    list_filter = ('status', 'requires_signature', 'archived_at')
+    list_display = ('id', 'title', 'category', 'uploaded_by', 'status', 'archived_at', 'requires_signature', 'created_at')
+    list_filter = ('category', 'status', 'requires_signature', 'archived_at')
     search_fields = ('title', 'uploaded_by__username')
     readonly_fields = ('created_at', 'updated_at', 'archived_at', 'archived_by')
     fields = (
         'title',
+        'category',
         'description',
         'file',
         'signed_file',

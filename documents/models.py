@@ -3,6 +3,12 @@ from django.db import models
 
 
 class Document(models.Model):
+    class Category(models.TextChoices):
+        COMPARATIVOS = 'COMPARATIVOS', 'COMPARATIVOS'
+        SERVICIOS_OBRA = 'SERVICIOS OBRA', 'SERVICIOS OBRA'
+        DISENO = 'DISEÑO', 'DISEÑO'
+        MERCADERO = 'MERCADERO', 'MERCADERO'
+
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
         SIGNED = 'signed', 'Signed'
@@ -10,6 +16,7 @@ class Document(models.Model):
         REJECTED = 'rejected', 'Rejected'
 
     title = models.CharField(max_length=255)
+    category = models.CharField(max_length=30, choices=Category.choices, default=Category.COMPARATIVOS)
     description = models.TextField(blank=True)
     file = models.FileField(upload_to='documents/')
     signed_file = models.FileField(upload_to='documents/signed/', blank=True, null=True)
