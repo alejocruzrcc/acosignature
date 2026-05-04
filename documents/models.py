@@ -7,7 +7,7 @@ class Document(models.Model):
         COMPARATIVOS = 'COMPARATIVOS', 'COMPARATIVOS'
         SERVICIOS_OBRA = 'SERVICIOS OBRA', 'SERVICIOS OBRA'
         DISENO = 'DISEÑO', 'DISEÑO'
-        MERCADERO = 'MERCADERO', 'MERCADERO'
+        MERCADEO = 'MERCADEO', 'MERCADEO'
 
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
