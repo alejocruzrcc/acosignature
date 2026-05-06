@@ -121,6 +121,26 @@
         <p style="margin:0;color:var(--muted)">Aún no tienes documentos asignados.</p>
       {% endfor %}
     </div>
+    {% if page_obj and page_obj.paginator.num_pages > 1 %}
+      <div class="pagination-wrap">
+        <div class="pagination-info">
+          Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="pagination-nav">
+          {% if page_obj.has_previous %}
+            <a class="btn btn-ghost pagination-btn" href="?page=1{% if pagination_query %}&{{ pagination_query }}{% endif %}">Primera</a>
+            <a class="btn btn-ghost pagination-btn" href="?page={{ page_obj.previous_page_number }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">Anterior</a>
+          {% endif %}
+
+          <span class="pagination-current">{{ page_obj.number }}</span>
+
+          {% if page_obj.has_next %}
+            <a class="btn btn-ghost pagination-btn" href="?page={{ page_obj.next_page_number }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">Siguiente</a>
+            <a class="btn btn-ghost pagination-btn" href="?page={{ page_obj.paginator.num_pages }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">Última</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
   </section>
 
   <div id="delete-modal" class="modal-overlay" hidden>

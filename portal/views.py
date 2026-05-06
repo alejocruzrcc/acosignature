@@ -3,12 +3,13 @@ from __future__ import annotations
 import base64
 import math
 import mimetypes
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404, HttpResponseForbidden
@@ -172,26 +173,34 @@ def approvals_index(request):
         documents = documents.filter(title__icontains=query)
     if request.user.role == request.user.Roles.CLIENT:
         documents = documents.filter(signatories__user=request.user).distinct()
-    else:
-        documents = documents.order_by('-created_at')
+    documents = documents.order_by('-created_at')
 
-    rows = []
+    all_rows = []
     pending_for_me = []
     for d in documents:
         row = _build_approval_row(request.user, d)
-        rows.append(row)
+        all_rows.append(row)
         if row['needs_my_signature'] and d.status == Document.Status.PENDING:
             pending_for_me.append(row)
+
+    paginator = Paginator(all_rows, 10)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+    rows = list(page_obj.object_list)
+    pagination_query = urlencode(
+        {k: v for k, v in {'categoria': selected_category, 'q': query}.items() if v}
+    )
 
     return render(
         request,
         'portal/aprobaciones.html',
         {
             'rows': rows,
+            'page_obj': page_obj,
             'pending_for_me': pending_for_me,
             'category_menu': category_choices,
             'selected_category': selected_category,
             'query': query,
+            'pagination_query': pagination_query,
         },
     )
 
