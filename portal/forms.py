@@ -93,6 +93,35 @@ class DocumentCreateForm(forms.ModelForm):
         return cleaned_data
 
 
+class DocumentEditForm(forms.ModelForm):
+    new_signers = UserModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label='Agregar firmantes',
+    )
+
+    class Meta:
+        model = Document
+        fields = ('title', 'description')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        instance = self.instance
+        existing_signer_ids = set(instance.signatories.values_list('user_id', flat=True)) if instance and instance.pk else set()
+        self.fields['new_signers'].queryset = (
+            User.objects.filter(is_active=True)
+            .exclude(id__in=existing_signer_ids)
+            .order_by('last_name', 'first_name', 'username')
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        new_signers = cleaned_data.get('new_signers')
+        if new_signers and self.instance.status != Document.Status.PENDING:
+            raise forms.ValidationError('Solo puedes agregar firmantes cuando el documento está en estado pendiente.')
+        return cleaned_data
+
+
 class SignatureCaptureForm(forms.Form):
     ALLOWED_UPLOAD_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'}
     ALLOWED_UPLOAD_CONTENT_TYPES = {

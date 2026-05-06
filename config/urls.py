@@ -20,6 +20,7 @@ urlpatterns = [
     path('aprobaciones/', portal_views.approvals_index, name='portal_approvals_index'),
     path('aprobaciones/archivados/', portal_views.archived_documents_index, name='portal_archived_documents'),
     path('aprobaciones/nuevo/', portal_views.document_create, name='portal_document_create'),
+    path('aprobaciones/<int:pk>/editar/', portal_views.document_edit, name='portal_document_edit'),
     path('aprobaciones/<int:pk>/archivar/', portal_views.document_archive, name='portal_document_archive'),
     path('aprobaciones/<int:pk>/eliminar/', portal_views.document_delete, name='portal_document_delete'),
     path('aprobaciones/<int:pk>/', portal_views.document_detail, name='portal_document_detail'),

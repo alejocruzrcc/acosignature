@@ -12,6 +12,45 @@
     <a class="btn btn-primary" href="{% url 'portal_document_create' %}">Nuevo documento</a>
   </div>
 
+  <section class="card searchbar-card" style="margin-top:14px">
+    <div class="h2" style="margin-bottom:6px">Buscar</div>
+    <form method="get" class="searchbar">
+      {% if selected_category %}
+        <input type="hidden" name="categoria" value="{{ selected_category }}">
+      {% endif %}
+      <input
+        type="search"
+        name="q"
+        value="{{ query }}"
+        placeholder="Buscar por nombre del documento…"
+        aria-label="Buscar por nombre del documento"
+      >
+      <button class="btn btn-primary" type="submit">Buscar</button>
+      {% if query %}
+        <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}{% if selected_category %}?categoria={{ selected_category|urlencode }}{% endif %}">
+          Limpiar
+        </a>
+      {% endif %}
+    </form>
+  </section>
+
+  <section class="card category-menu-card" style="margin-top:14px">
+    <div class="h2" style="margin-bottom:6px">Filtrar por categoría</div>
+    <div class="category-menu-grid">
+      <a class="category-menu-btn{% if not selected_category %} is-active{% endif %}" href="{% url 'portal_approvals_index' %}{% if query %}?q={{ query|urlencode }}{% endif %}">
+        Todas
+      </a>
+      {% for value, label in category_menu %}
+        <a
+          class="category-menu-btn{% if selected_category == value %} is-active{% endif %}"
+          href="{% url 'portal_approvals_index' %}?categoria={{ value|urlencode }}{% if query %}&q={{ query|urlencode }}{% endif %}"
+        >
+          {{ label }}
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+
   {% if pending_for_me %}
     <section class="card" style="margin-top:14px">
       <div class="h2">Pendientes por tu firma</div>
@@ -61,9 +100,20 @@
 
   <section class="card" style="margin-top:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <div class="h2" style="margin:0">Todos tus documentos relacionados</div>
+      <div class="h2" style="margin:0">
+        {% if selected_category %}
+          Documentos de {{ selected_category }}
+        {% else %}
+          Todos tus documentos relacionados
+        {% endif %}
+      </div>
       <a class="btn btn-ghost" href="{% url 'portal_archived_documents' %}">Documentos archivados</a>
     </div>
+    {% if query %}
+      <div class="help" style="margin-top:0">
+        Mostrando resultados para: <strong>{{ query }}</strong>
+      </div>
+    {% endif %}
     <div class="doc-card-list">
       {% for row in rows %}
         {% include "portal/_doc_card.html" with row=row show_archive=True %}

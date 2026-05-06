@@ -22,7 +22,7 @@ from documents.services import rebuild_signed_pdf
 from signatures.models import Signature
 from workflows.services import WorkflowService
 
-from .forms import DocumentCreateForm, RejectionReasonForm, SignatureCaptureForm, UserProfileForm
+from .forms import DocumentCreateForm, DocumentEditForm, RejectionReasonForm, SignatureCaptureForm, UserProfileForm
 
 
 def home(request):
@@ -153,11 +153,23 @@ def _file_to_data_url(file_obj, fallback_name='firma.png'):
 
 @login_required
 def approvals_index(request):
+    category_choices = list(Document.Category.choices)
+    valid_categories = {value for value, _label in category_choices}
+    selected_category = (request.GET.get('categoria') or '').strip()
+    if selected_category and selected_category not in valid_categories:
+        selected_category = ''
+
+    query = (request.GET.get('q') or '').strip()
+
     documents = (
         Document.objects.select_related('uploaded_by')
         .prefetch_related('signatories__user', 'signatures__user')
         .filter(archived_at__isnull=True)
     )
+    if selected_category:
+        documents = documents.filter(category=selected_category)
+    if query:
+        documents = documents.filter(title__icontains=query)
     if request.user.role == request.user.Roles.CLIENT:
         documents = documents.filter(signatories__user=request.user).distinct()
     else:
@@ -177,6 +189,9 @@ def approvals_index(request):
         {
             'rows': rows,
             'pending_for_me': pending_for_me,
+            'category_menu': category_choices,
+            'selected_category': selected_category,
+            'query': query,
         },
     )
 
@@ -286,6 +301,45 @@ def document_create(request):
         form = DocumentCreateForm(initial={'uploader': request.user})
 
     return render(request, 'portal/documento_nuevo.html', {'form': form})
+
+
+@login_required
+def document_edit(request, pk: int):
+    document = get_object_or_404(Document, pk=pk)
+    if document.uploaded_by_id != request.user.id:
+        return _forbidden_or_login(request, 'Solo el creador puede editar este documento.')
+
+    if request.method == 'POST':
+        form = DocumentEditForm(request.POST, instance=document)
+        if form.is_valid():
+            with transaction.atomic():
+                form.save()
+                new_signers = list(form.cleaned_data.get('new_signers') or [])
+                if new_signers:
+                    last_order = document.signatories.order_by('-sign_order', '-id').values_list('sign_order', flat=True).first() or 0
+                    for offset, signer in enumerate(new_signers, start=1):
+                        document.signatories.create(
+                            user=signer,
+                            status=DocumentSignatory.Status.PENDING,
+                            sign_order=last_order + offset,
+                        )
+
+            if new_signers:
+                messages.success(request, 'Documento actualizado y firmantes agregados correctamente.')
+            else:
+                messages.success(request, 'Documento actualizado correctamente.')
+            return redirect('portal_document_detail', pk=document.id)
+    else:
+        form = DocumentEditForm(instance=document)
+
+    return render(
+        request,
+        'portal/documento_editar.html',
+        {
+            'document': document,
+            'form': form,
+        },
+    )
 
 
 @login_required

@@ -1,0 +1,61 @@
+{% extends "base_portal.html" %}
+{% block title %}Editar documento · Constructora Indico{% endblock %}
+
+{% block content %}
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div>
+      <div class="h2">Documento</div>
+      <h1 class="h1">Editar información</h1>
+      <p style="margin:0;color:var(--muted);line-height:1.6">
+        Actualiza únicamente el título y la descripción del documento.
+      </p>
+    </div>
+    <a class="btn btn-ghost" href="{% url 'portal_document_detail' document.id %}">Volver al detalle</a>
+  </div>
+
+  <section class="card" style="margin-top:14px">
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="field">
+        <label for="id_title">Título</label>
+        {{ form.title }}
+        {{ form.title.errors }}
+      </div>
+
+      <div class="field">
+        <label for="id_description">Descripción</label>
+        {{ form.description }}
+        {{ form.description.errors }}
+      </div>
+
+      <div class="field">
+        <label for="id_new_signers">Agregar firmantes</label>
+        {{ form.new_signers }}
+        <div class="help">Puedes seleccionar uno o varios usuarios. Se agregarán al final del orden actual de firma.</div>
+        {{ form.new_signers.errors }}
+      </div>
+
+      <div class="field">
+        <label>Firmantes actuales</label>
+        <div style="display:grid;gap:6px">
+          {% for signatory in document.signatories.all %}
+            <div style="font-size:13px;color:var(--muted)">
+              {{ signatory.sign_order }}. {{ signatory.user.get_full_name|default:signatory.user.username }} ({{ signatory.get_status_display }})
+            </div>
+          {% empty %}
+            <div style="font-size:13px;color:var(--muted)">No hay firmantes asignados.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="message" style="border-left-color:#ef4444;background:#fff5f5">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      <button class="btn btn-primary" type="submit">Guardar cambios</button>
+    </form>
+  </section>
+{% endblock %}

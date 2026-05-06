@@ -11,6 +11,9 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Volver</a>
+      {% if document.uploaded_by_id == request.user.id %}
+        <a class="btn btn-ghost" href="{% url 'portal_document_edit' document.id %}">Editar</a>
+      {% endif %}
       {% if my_signatory and my_signatory.status == "pending" and is_my_turn %}
         <a class="btn btn-primary" href="{% url 'portal_approve_entry' document.id %}">Aprobar</a>
         <a class="btn btn-danger" style="background:#fff1f2;border-color:#fecaca;color:#991b1b" href="{% url 'portal_reject_entry' document.id %}">Rechazar</a>
