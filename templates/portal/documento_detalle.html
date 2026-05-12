@@ -11,6 +11,11 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <a class="btn btn-ghost" href="{% url 'portal_approvals_index' %}">Volver</a>
+      {% if document.signed_file or document.file %}
+        <button type="button" class="btn btn-primary js-open-doc-preview" aria-haspopup="dialog">
+          Vista previa
+        </button>
+      {% endif %}
       {% if document.uploaded_by_id == request.user.id %}
         <a class="btn btn-ghost" href="{% url 'portal_document_edit' document.id %}">Editar</a>
       {% endif %}
@@ -126,4 +131,68 @@
       </table>
     </div>
   </section>
+
+  {% if document.signed_file or document.file %}
+    <div
+      id="doc-preview-modal"
+      class="modal-overlay modal-overlay--preview"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="doc-preview-title"
+      data-pdf-url="{% url 'portal_document_pdf' document.id %}"
+    >
+      <div class="modal-card modal-card--preview">
+        <div class="modal-preview-header">
+          <h2 id="doc-preview-title" class="modal-preview-title">Vista previa del documento</h2>
+          <button type="button" class="btn btn-ghost js-close-doc-preview">Cerrar</button>
+        </div>
+        <div class="modal-preview-body">
+          <iframe id="doc-preview-iframe" class="pdf modal-preview-iframe" title="Vista previa del PDF"></iframe>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+  {% if document.signed_file or document.file %}
+    <script>
+      (function () {
+        const modal = document.getElementById('doc-preview-modal');
+        const iframe = document.getElementById('doc-preview-iframe');
+        const openBtn = document.querySelector('.js-open-doc-preview');
+        if (!modal || !iframe || !openBtn) return;
+        const pdfUrl = modal.getAttribute('data-pdf-url');
+        const closeEls = modal.querySelectorAll('.js-close-doc-preview');
+
+        function openModal() {
+          if (pdfUrl && !iframe.getAttribute('src')) {
+            iframe.setAttribute('src', pdfUrl);
+          }
+          modal.removeAttribute('hidden');
+          document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+          modal.setAttribute('hidden', '');
+          document.body.style.overflow = '';
+        }
+
+        openBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          openModal();
+        });
+        closeEls.forEach(function (btn) {
+          btn.addEventListener('click', closeModal);
+        });
+        modal.addEventListener('click', function (e) {
+          if (e.target === modal) closeModal();
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && !modal.hasAttribute('hidden')) closeModal();
+        });
+      })();
+    </script>
+  {% endif %}
 {% endblock %}
