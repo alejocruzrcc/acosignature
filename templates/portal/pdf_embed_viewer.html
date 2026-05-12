@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if document_title %}{{ document_title }} · {% endif %}Vista previa</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f1f5f9; color: #334155; font-family: Montserrat, system-ui, sans-serif; }
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 10px 12px;
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .top.err { color: #b91c1c; }
+    #pdf-pages {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      padding-bottom: 24px;
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      background: #fff;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+      border-radius: 4px;
+    }
+    .msg { padding: 24px 16px; text-align: center; line-height: 1.5; }
+    .msg.err { color: #b91c1c; }
+  </style>
+</head>
+<body>
+{% if error == 'no_file' %}
+  <p class="msg err">El archivo del documento no está disponible.</p>
+{% else %}
+  <div class="top" id="pdf-status">Cargando documento…</div>
+  <div id="pdf-pages"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+  <script>
+    (function () {
+      var pdfUrl = '{{ pdf_fetch_url|escapejs }}';
+      var statusEl = document.getElementById('pdf-status');
+      var pagesEl = document.getElementById('pdf-pages');
+      if (!pdfUrl || typeof pdfjsLib === 'undefined') {
+        if (statusEl) {
+          statusEl.textContent = 'No se pudo iniciar el visor PDF.';
+          statusEl.className = 'top err';
+        }
+        return;
+      }
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      function maxCanvasWidth() {
+        return Math.min(window.innerWidth - 24, 960);
+      }
+
+      function renderAllPages(pdf) {
+        var maxW = maxCanvasWidth();
+        statusEl.textContent = 'Renderizando ' + pdf.numPages + ' página(s)…';
+
+        function renderPage(num) {
+          return pdf.getPage(num).then(function (page) {
+            var base = page.getViewport({ scale: 1 });
+            var scale = maxW / base.width;
+            var viewport = page.getViewport({ scale: scale });
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d', { alpha: false });
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+            canvas.style.width = Math.floor(viewport.width) + 'px';
+            canvas.style.height = Math.floor(viewport.height) + 'px';
+            pagesEl.appendChild(canvas);
+            return page.render({
+              canvasContext: ctx,
+              viewport: viewport,
+            }).promise;
+          });
+        }
+
+        var seq = Promise.resolve();
+        for (var i = 1; i <= pdf.numPages; i++) {
+          (function (n) {
+            seq = seq.then(function () {
+              return renderPage(n);
+            });
+          })(i);
+        }
+        return seq.then(function () {
+          statusEl.textContent = 'Listo · ' + pdf.numPages + ' página(s)';
+        });
+      }
+
+      pdfjsLib
+        .getDocument({ url: pdfUrl, withCredentials: true })
+        .promise.then(function (pdf) {
+          return renderAllPages(pdf);
+        })
+        .catch(function () {
+          statusEl.textContent = 'No se pudo cargar el PDF';
+          statusEl.className = 'top err';
+          pagesEl.innerHTML =
+            '<p class="msg err">Si estás en el móvil, prueba también “Abrir en nueva pestaña” desde la página del documento.</p>';
+        });
+    })();
+  </script>
+{% endif %}
+</body>
+</html>

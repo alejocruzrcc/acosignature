@@ -140,15 +140,20 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="doc-preview-title"
-      data-pdf-url="{% url 'portal_document_pdf' document.id %}"
+      data-embed-url="{% url 'portal_document_pdf_embed' document.id %}"
     >
       <div class="modal-card modal-card--preview">
         <div class="modal-preview-header">
           <h2 id="doc-preview-title" class="modal-preview-title">Vista previa del documento</h2>
-          <button type="button" class="btn btn-ghost js-close-doc-preview">Cerrar</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            {% if document.signed_file or document.file %}
+              <a class="btn btn-ghost" href="{% url 'portal_document_pdf' document.id %}" target="_blank" rel="noopener">Nueva pestaña</a>
+            {% endif %}
+            <button type="button" class="btn btn-ghost js-close-doc-preview">Cerrar</button>
+          </div>
         </div>
-        <div class="modal-preview-body">
-          <iframe id="doc-preview-iframe" class="pdf modal-preview-iframe" title="Vista previa del PDF"></iframe>
+        <div class="modal-preview-body modal-preview-body--iframe">
+          <iframe id="doc-preview-iframe" class="modal-preview-iframe" title="Vista previa del PDF"></iframe>
         </div>
       </div>
     </div>
@@ -163,12 +168,12 @@
         const iframe = document.getElementById('doc-preview-iframe');
         const openBtn = document.querySelector('.js-open-doc-preview');
         if (!modal || !iframe || !openBtn) return;
-        const pdfUrl = modal.getAttribute('data-pdf-url');
+        const embedUrl = modal.getAttribute('data-embed-url');
         const closeEls = modal.querySelectorAll('.js-close-doc-preview');
 
         function openModal() {
-          if (pdfUrl && !iframe.getAttribute('src')) {
-            iframe.setAttribute('src', pdfUrl);
+          if (embedUrl && !iframe.getAttribute('src')) {
+            iframe.setAttribute('src', embedUrl);
           }
           modal.removeAttribute('hidden');
           document.body.style.overflow = 'hidden';

@@ -110,6 +110,9 @@
         <label for="id_file">PDF</label>
         {{ form.file }}
         <div class="help">Solo PDF. Máximo 10MB.</div>
+        <div style="margin-top:10px">
+          <button type="button" class="btn btn-primary" id="btn-local-pdf-preview" disabled>Vista previa</button>
+        </div>
         {{ form.file.errors }}
       </div>
 
@@ -163,9 +166,23 @@
       <button class="btn btn-primary btn-block" type="submit">Enviar</button>
     </form>
   </section>
+
+  <div id="local-pdf-modal" class="modal-overlay modal-overlay--preview" hidden role="dialog" aria-modal="true" aria-labelledby="local-pdf-title">
+    <div class="modal-card modal-card--preview">
+      <div class="modal-preview-header">
+        <h2 id="local-pdf-title" class="modal-preview-title">Vista previa del PDF</h2>
+        <button type="button" class="btn btn-ghost js-close-local-pdf">Cerrar</button>
+      </div>
+      <div class="modal-preview-body" style="overflow:auto;max-height:min(72vh,680px)">
+        <div id="local-pdf-status" class="help" style="margin:0 0 8px"></div>
+        <div id="local-pdf-pages" style="display:flex;flex-direction:column;align-items:center;gap:10px"></div>
+      </div>
+    </div>
+  </div>
 {% endblock %}
 
 {% block extra_scripts %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
   <script>
     (function () {
@@ -274,6 +291,107 @@
       soyFirmante.addEventListener('change', syncCurrentUserInList);
       syncCurrentUserInList();
       syncHiddenInput();
+    })();
+
+    (function localPdfPreview() {
+      var fileInput = document.getElementById('id_file');
+      var previewBtn = document.getElementById('btn-local-pdf-preview');
+      var modal = document.getElementById('local-pdf-modal');
+      var pagesEl = document.getElementById('local-pdf-pages');
+      var statusEl = document.getElementById('local-pdf-status');
+      if (!fileInput || !previewBtn || !modal || !pagesEl || !statusEl) return;
+
+      function isPdfFile(file) {
+        if (!file) return false;
+        var name = (file.name || '').toLowerCase();
+        return name.endsWith('.pdf') || file.type === 'application/pdf';
+      }
+
+      function syncPreviewEnabled() {
+        previewBtn.disabled = !isPdfFile(fileInput.files && fileInput.files[0]);
+      }
+
+      fileInput.addEventListener('change', syncPreviewEnabled);
+      syncPreviewEnabled();
+
+      function closeModal() {
+        modal.setAttribute('hidden', '');
+        document.body.style.overflow = '';
+      }
+
+      function openModal() {
+        var file = fileInput.files && fileInput.files[0];
+        if (!file || !isPdfFile(file)) return;
+        if (typeof pdfjsLib === 'undefined') {
+          statusEl.textContent = 'No se pudo cargar el visor PDF. Comprueba tu conexión.';
+          modal.removeAttribute('hidden');
+          document.body.style.overflow = 'hidden';
+          return;
+        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pagesEl.innerHTML = '';
+        statusEl.textContent = 'Cargando…';
+        modal.removeAttribute('hidden');
+        document.body.style.overflow = 'hidden';
+
+        var reader = new FileReader();
+        reader.onload = function () {
+          var buf = reader.result;
+          var data = new Uint8Array(buf);
+          pdfjsLib
+            .getDocument({ data: data })
+            .promise.then(function (pdf) {
+              function maxW() {
+                return Math.min(window.innerWidth - 40, 960);
+              }
+              var seq = Promise.resolve();
+              for (var i = 1; i <= pdf.numPages; i++) {
+                (function (num) {
+                  seq = seq.then(function () {
+                    return pdf.getPage(num).then(function (page) {
+                      var base = page.getViewport({ scale: 1 });
+                      var scale = maxW() / base.width;
+                      var viewport = page.getViewport({ scale: scale });
+                      var canvas = document.createElement('canvas');
+                      var ctx = canvas.getContext('2d', { alpha: false });
+                      canvas.width = Math.floor(viewport.width);
+                      canvas.height = Math.floor(viewport.height);
+                      canvas.style.width = canvas.width + 'px';
+                      canvas.style.height = canvas.height + 'px';
+                      pagesEl.appendChild(canvas);
+                      return page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                    });
+                  });
+                })(i);
+              }
+              return seq.then(function () {
+                statusEl.textContent = 'Listo · ' + pdf.numPages + ' página(s)';
+              });
+            })
+            .catch(function () {
+              statusEl.textContent = 'No se pudo leer el PDF. Verifica que sea un archivo válido.';
+            });
+        };
+        reader.onerror = function () {
+          statusEl.textContent = 'Error al leer el archivo.';
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      previewBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        openModal();
+      });
+      modal.querySelectorAll('.js-close-local-pdf').forEach(function (btn) {
+        btn.addEventListener('click', closeModal);
+      });
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !modal.hasAttribute('hidden')) closeModal();
+      });
     })();
   </script>
 {% endblock %}

@@ -25,6 +25,7 @@ urlpatterns = [
     path('aprobaciones/<int:pk>/eliminar/', portal_views.document_delete, name='portal_document_delete'),
     path('aprobaciones/<int:pk>/', portal_views.document_detail, name='portal_document_detail'),
     path('aprobaciones/<int:pk>/pdf/', portal_views.document_pdf, name='portal_document_pdf'),
+    path('aprobaciones/<int:pk>/visor-pdf/', portal_views.document_pdf_embed, name='portal_document_pdf_embed'),
     path('aprobaciones/<int:pk>/pdf-firmado/', portal_views.document_signed_download, name='portal_document_signed_download'),
     path('aprobaciones/<int:pk>/aprobar/', portal_views.approve_entry, name='portal_approve_entry'),
     path('aprobaciones/<int:pk>/rechazar/', portal_views.reject_entry, name='portal_reject_entry'),

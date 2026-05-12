@@ -3,15 +3,6 @@
 
 {% block extra_head %}
   <style>
-    /* En móviles, el visor embebido de PDF suele fallar; priorizamos abrir en visor nativo */
-    @media (max-width: 720px){
-      .pdf-embed{ display:none; }
-      .pdf-mobile-actions{ display:block; }
-    }
-    @media (min-width: 721px){
-      .pdf-mobile-actions{ display:none; }
-    }
-
     .pdf-modal{
       position: fixed;
       inset: 0;
@@ -47,10 +38,26 @@
     .pdf-modal-body{
       padding: 8px;
       background: #fafafa;
+      min-height: 0;
     }
-    .pdf-modal-body .pdf{
+    .pdf-modal-body iframe.pdf{
+      width: 100%;
       height: 100%;
-      min-height: 60vh;
+      min-height: min(72vh, 640px);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+    .pdf-embed-wrap{
+      margin-top: 8px;
+    }
+    .pdf-embed-wrap iframe.pdf{
+      width: 100%;
+      min-height: min(56vh, 520px);
+      height: min(56vh, 520px);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
     }
   </style>
 {% endblock %}
@@ -79,25 +86,21 @@
       <div class="h2">Vista previa (PDF)</div>
 
       {% url 'portal_document_pdf' document.id as pdf_url %}
+      {% url 'portal_document_pdf_embed' document.id as embed_url %}
 
-      <div class="pdf-mobile-actions" style="display:none">
-        <p style="margin:0 0 10px;color:var(--muted);line-height:1.6">
-          En muchos teléfonos el PDF no se incrusta bien. Usa el modal para visualizarlo.
-        </p>
-        <button class="btn btn-primary btn-block" type="button" id="open-pdf-modal-mobile">Ver documento</button>
-        <a class="btn btn-ghost btn-block" href="{{ pdf_url }}" target="_blank" rel="noopener">Abrir en nueva pestaña</a>
+      <p style="margin:0 0 10px;color:var(--muted);line-height:1.6;font-size:13px">
+        El visor funciona en móvil y escritorio. Si prefieres el lector del sistema, abre en nueva pestaña.
+      </p>
+
+      <div class="pdf-embed-wrap">
+        <iframe class="pdf" title="Vista previa del documento" src="{{ embed_url }}"></iframe>
       </div>
 
-      <!-- object + iframe: mejora compatibilidad entre navegadores -->
-      <object class="pdf pdf-embed" data="{{ pdf_url }}#view=FitH" type="application/pdf">
-        <iframe class="pdf" src="{{ pdf_url }}#view=FitH"></iframe>
-      </object>
-
-      <p class="footer-note">
-        Si aún no carga: usa <strong>Abrir PDF</strong> (recomendado en iPhone/Android).
+      <p class="footer-note" style="margin-top:10px">
+        También puedes <a href="{{ pdf_url }}" target="_blank" rel="noopener">abrir el PDF en una pestaña nueva</a>.
       </p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost" type="button" id="open-pdf-modal">Ver documento</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-primary" type="button" id="open-pdf-modal">Pantalla completa</button>
         <a class="btn btn-ghost" href="{{ pdf_url }}" target="_blank" rel="noopener">Abrir en nueva pestaña</a>
       </div>
     </div>
@@ -110,9 +113,7 @@
         <button class="btn btn-ghost" type="button" id="close-pdf-modal">Cerrar</button>
       </div>
       <div class="pdf-modal-body">
-        <object class="pdf" data="{{ pdf_url }}#view=FitH" type="application/pdf">
-          <iframe class="pdf" src="{{ pdf_url }}#view=FitH"></iframe>
-        </object>
+        <iframe class="pdf" title="Documento a firmar" src="{{ embed_url }}"></iframe>
       </div>
     </div>
   </div>
@@ -126,7 +127,6 @@
     (function () {
       const modal = document.getElementById('pdf-modal');
       const openBtn = document.getElementById('open-pdf-modal');
-      const openBtnMobile = document.getElementById('open-pdf-modal-mobile');
       const closeBtn = document.getElementById('close-pdf-modal');
 
       if (!modal) return;
@@ -144,7 +144,6 @@
       }
 
       openBtn && openBtn.addEventListener('click', openModal);
-      openBtnMobile && openBtnMobile.addEventListener('click', openModal);
       closeBtn && closeBtn.addEventListener('click', closeModal);
 
       modal.addEventListener('click', function (e) {
@@ -152,7 +151,7 @@
       });
 
       document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') closeModal();
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
       });
     })();
   </script>

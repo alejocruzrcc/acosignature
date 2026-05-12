@@ -16,6 +16,7 @@ from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from documents.models import Document, DocumentSignatory
@@ -409,6 +410,33 @@ def document_pdf(request, pk: int):
     # Evita respuestas cacheadas “pegadas” entre usuarios/sesiones en proxies/CDN
     resp['Cache-Control'] = 'private, no-store'
     return resp
+
+
+@login_required
+@xframe_options_sameorigin
+def document_pdf_embed(request, pk: int):
+    """
+    Página HTML que renderiza el PDF con PDF.js (canvas).
+    Sirve para vista previa en móviles y dentro de iframes, donde el PDF nativo suele fallar.
+    """
+    document = get_object_or_404(Document, pk=pk)
+    if not _can_access_document(request.user, document):
+        return _forbidden_or_login(request, 'No tienes acceso a este documento.')
+
+    file_field = document.signed_file if document.signed_file else document.file
+    if not file_field:
+        return render(
+            request,
+            'portal/pdf_embed_viewer.html',
+            {'error': 'no_file', 'pdf_fetch_url': '', 'document_title': document.title},
+        )
+
+    pdf_fetch_url = reverse('portal_document_pdf', args=[pk])
+    return render(
+        request,
+        'portal/pdf_embed_viewer.html',
+        {'pdf_fetch_url': pdf_fetch_url, 'document_title': document.title},
+    )
 
 
 @login_required

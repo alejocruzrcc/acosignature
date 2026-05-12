@@ -534,11 +534,16 @@ a{color:inherit}
   min-height:0;
   padding:0 12px 12px;
 }
+.modal-preview-body--iframe{
+  display:flex;
+  flex-direction:column;
+}
 .modal-preview-iframe{
   display:block;
   width:100%;
+  flex:1 1 auto;
+  min-height:min(72vh, 720px);
   height:min(72vh, 720px);
-  min-height:280px;
   border:1px solid var(--line);
   border-radius:12px;
   background:#fafafa;
@@ -611,6 +616,10 @@ a{color:inherit}
   .pagination-btn{
     flex:1 1 120px;
     min-width:0;
+  }
+  .modal-preview-iframe{
+    min-height:50vh;
+    height:65vh;
   }
   .pagination-current{
     min-width:52px;
