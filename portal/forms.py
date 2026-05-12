@@ -134,7 +134,6 @@ class SignatureCaptureForm(forms.Form):
     }
 
     class SignatureMode(models.TextChoices):
-        DRAW = 'draw', 'Dibujar firma'
         SAVED = 'saved', 'Usar firma guardada'
         UPLOAD = 'upload', 'Subir imagen de firma'
 
@@ -152,13 +151,10 @@ class SignatureCaptureForm(forms.Form):
         signature_data = cleaned_data.get('signature_data')
         signature_upload = cleaned_data.get('signature_upload')
 
-        if mode == self.SignatureMode.DRAW and not signature_data:
-            self.add_error('signature_data', 'Dibuja la firma antes de continuar.')
-
         if mode == self.SignatureMode.SAVED:
             has_saved = bool(self.user and self.user.signature_image)
             if not has_saved:
-                self.add_error('signature_mode', 'No tienes una firma guardada. Sube una imagen o dibuja tu firma.')
+                self.add_error('signature_mode', 'No tienes una firma guardada. Sube una imagen de firma.')
 
         if mode == self.SignatureMode.UPLOAD and not signature_upload:
             self.add_error('signature_upload', 'Selecciona una imagen de firma para continuar.')

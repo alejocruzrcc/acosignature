@@ -3,9 +3,11 @@ from __future__ import annotations
 import base64
 import re
 from io import BytesIO
-from typing import Tuple
+from types import SimpleNamespace
+from typing import Any, List, Tuple
 
 from django.core.files.base import ContentFile
+from django.utils import timezone as django_timezone
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
@@ -25,12 +27,10 @@ def _decode_data_url(data_url: str) -> Tuple[bytes, str]:
     return base64.b64decode(payload), mime_type
 
 
-def _build_signatures_page(document) -> bytes:
+def _render_signatures_pdf_bytes(signatures: List[Any], document_title: str) -> bytes:
     """
-    Construye una o más páginas de firmas con:
-    - imagen de firma
-    - nombre completo (o username)
-    - número de documento del firmante
+    Construye una o más páginas de firmas. Cada elemento de `signatures` debe tener:
+    user, signature_data (data URL), signed_at (datetime).
     """
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -38,9 +38,7 @@ def _build_signatures_page(document) -> bytes:
     margin_x = 48
     margin_y = 42
 
-    signatures = list(document.signatures.select_related('user').order_by('signed_at', 'id'))
-
-    c.setTitle(f'Firmas - {document.title}')
+    c.setTitle(f'Firmas - {document_title}')
     y = height - margin_y
     c.setFont('Helvetica-Bold', 14)
     c.drawString(margin_x, y, 'Hoja de firmas')
@@ -99,6 +97,50 @@ def _build_signatures_page(document) -> bytes:
 
     c.save()
     return buf.getvalue()
+
+
+def _build_signatures_page(document) -> bytes:
+    """
+    Construye una o más páginas de firmas con las firmas ya guardadas en BD.
+    """
+    signatures = list(document.signatures.select_related('user').order_by('signed_at', 'id'))
+    return _render_signatures_pdf_bytes(signatures, document.title)
+
+
+def build_signed_pdf_preview_bytes(document, pending_user, pending_signature_data: str) -> bytes:
+    """
+    PDF en memoria: documento original + hoja de firmas como quedaría al registrar
+    la firma pendiente del usuario (sin persistir cambios).
+    """
+    if not document.file:
+        raise ValueError('El documento no tiene archivo base.')
+    if not document.file.name or not document.file.storage.exists(document.file.name):
+        raise ValueError('No se encontró el archivo base del documento en el almacenamiento.')
+
+    existing = list(document.signatures.select_related('user').order_by('signed_at', 'id'))
+    pending = SimpleNamespace(
+        user=pending_user,
+        signature_data=pending_signature_data,
+        signed_at=django_timezone.now(),
+    )
+    rows = existing + [pending]
+    signatures_pdf_bytes = _render_signatures_pdf_bytes(rows, document.title)
+
+    document.file.open('rb')
+    original_reader = PdfReader(document.file)
+    writer = PdfWriter()
+
+    for page in original_reader.pages:
+        writer.add_page(page)
+
+    signatures_reader = PdfReader(BytesIO(signatures_pdf_bytes))
+    for page in signatures_reader.pages:
+        writer.add_page(page)
+
+    output = BytesIO()
+    writer.write(output)
+    output.seek(0)
+    return output.read()
 
 
 def rebuild_signed_pdf(document) -> None:

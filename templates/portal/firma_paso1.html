@@ -1,5 +1,5 @@
 {% extends "base_portal.html" %}
-{% block title %}Revisión · {{ document.title }}{% endblock %}
+{% block title %}Revisión y firma · {{ document.title }}{% endblock %}
 
 {% block extra_head %}
   <style>
@@ -59,16 +59,19 @@
       border-radius: 12px;
       background: #fff;
     }
+    .sign-block{
+      margin-top: 14px;
+    }
   </style>
 {% endblock %}
 
 {% block content %}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
     <div>
-      <div class="h2">Paso 1 de 3</div>
+      <div class="h2">Paso 1 de 2</div>
       <h1 class="h1">Revisión del documento</h1>
       <p style="margin:0;color:var(--muted);line-height:1.6">
-        Verifica la información y el PDF. Luego continúa para capturar tu firma.
+        Verifica el resumen y el PDF. Luego confirma tu firma con un solo paso.
       </p>
     </div>
     <a class="btn btn-ghost" href="{% url 'portal_document_detail' document.id %}">Cancelar</a>
@@ -118,10 +121,48 @@
     </div>
   </div>
 
-  <form method="post" style="margin-top:14px">
-    {% csrf_token %}
-    <button class="btn btn-primary btn-block" type="submit">Siguiente</button>
-  </form>
+  <section class="card sign-block">
+    <div class="h2">Firma</div>
+    <form method="post" enctype="multipart/form-data" id="sign-flow-form">
+      {% csrf_token %}
+
+      {% if form and form.non_field_errors %}
+        <div class="message" style="border-left-color:#ef4444;background:#fff5f5;margin-bottom:12px">
+          {{ form.non_field_errors }}
+        </div>
+      {% endif %}
+
+      {% if has_saved_signature %}
+        <p style="margin:0 0 10px;color:var(--muted);line-height:1.6">
+          Tienes una firma guardada en tu perfil. Al pulsar <strong>Firmar</strong> se usará automáticamente.
+        </p>
+        <div style="border:1px solid var(--line);border-radius:16px;padding:12px;background:#fff;text-align:center">
+          <img src="{{ saved_signature_url }}" alt="Firma guardada" style="max-width:100%;max-height:200px;display:inline-block" />
+        </div>
+      {% else %}
+        <p style="margin:0 0 10px;color:var(--muted);line-height:1.6">
+          Aún no tienes firma guardada. Sube una imagen de tu firma; quedará guardada en tu perfil para próximas aprobaciones.
+        </p>
+        <div class="field">
+          <label for="id_signature_upload">Imagen de firma</label>
+          <input type="file" name="signature_upload" id="id_signature_upload" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,image/jpeg,image/png,image/webp,image/gif,image/bmp" />
+          <div class="help">Formatos permitidos: JPG, JPEG, PNG, WEBP, GIF y BMP.</div>
+          {% if form and form.signature_upload.errors %}
+            <div class="help" style="color:#b91c1c">{{ form.signature_upload.errors|join:", " }}</div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if form and form.signature_mode.errors %}
+        <div class="help" style="color:#b91c1c;margin-top:8px">{{ form.signature_mode.errors|join:", " }}</div>
+      {% endif %}
+
+      <button class="btn btn-primary btn-block" type="submit" style="margin-top:14px">Firmar</button>
+      <p class="footer-note" style="margin-top:10px;margin-bottom:0">
+        El siguiente paso solo confirma la firma antes de registrarla en el documento.
+      </p>
+    </form>
+  </section>
 
   <script>
     (function () {

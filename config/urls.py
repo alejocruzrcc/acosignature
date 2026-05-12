@@ -31,6 +31,16 @@ urlpatterns = [
     path('aprobaciones/<int:pk>/rechazar/', portal_views.reject_entry, name='portal_reject_entry'),
     path('aprobaciones/<int:pk>/firmar/', portal_views.sign_flow_review, name='portal_sign_flow_review'),
     path('aprobaciones/<int:pk>/firmar/firma/', portal_views.sign_flow_sign, name='portal_sign_flow_sign'),
+    path(
+        'aprobaciones/<int:pk>/firmar/vista-previa-firmado.pdf',
+        portal_views.document_sign_preview_pdf,
+        name='portal_document_sign_preview_pdf',
+    ),
+    path(
+        'aprobaciones/<int:pk>/firmar/vista-previa-firmado/',
+        portal_views.document_sign_preview_embed,
+        name='portal_document_sign_preview_embed',
+    ),
     path('aprobaciones/<int:pk>/firmar/finalizar/', portal_views.sign_flow_finalize, name='portal_sign_flow_finalize'),
     path('admin/', admin.site.urls),
     path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),

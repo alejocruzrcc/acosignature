@@ -41,6 +41,8 @@
 <body>
 {% if error == 'no_file' %}
   <p class="msg err">El archivo del documento no está disponible.</p>
+{% elif error == 'no_session' %}
+  <p class="msg err">No hay una firma pendiente de confirmar. Vuelve al paso anterior.</p>
 {% else %}
   <div class="top" id="pdf-status">Cargando documento…</div>
   <div id="pdf-pages"></div>

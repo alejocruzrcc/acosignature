@@ -5,6 +5,8 @@ import math
 import mimetypes
 from urllib.parse import quote, urlencode
 
+from io import BytesIO
+
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -20,7 +22,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from documents.models import Document, DocumentSignatory
-from documents.services import rebuild_signed_pdf
+from documents.services import build_signed_pdf_preview_bytes, rebuild_signed_pdf
 from signatures.models import Signature
 from workflows.services import WorkflowService
 
@@ -151,6 +153,82 @@ def _file_to_data_url(file_obj, fallback_name='firma.png'):
 
     encoded = base64.b64encode(raw).decode('ascii')
     return f'data:{content_type};base64,{encoded}'
+
+
+def _user_has_usable_saved_signature(user) -> bool:
+    """True si el usuario tiene imagen de firma y el archivo existe en almacenamiento."""
+    if not getattr(user, 'signature_image', None):
+        return False
+    try:
+        user.signature_image.open('rb')
+        user.signature_image.close()
+    except (FileNotFoundError, OSError):
+        return False
+    return True
+
+
+def _sign_flow_gate(request, document):
+    """
+    Validaciones comunes del flujo de firma.
+    Devuelve (signatory, respuesta). Si respuesta no es None, devuélvela desde la vista.
+    """
+    signatory = _signatory_for(request.user, document)
+    if not signatory:
+        return None, _forbidden_or_login(request, 'No eres firmante de este documento.')
+    if signatory.status == 'signed':
+        messages.info(request, 'Ya finalizaste tu firma en este documento.')
+        return None, redirect('portal_document_detail', pk=document.id)
+    if signatory.status == 'rejected':
+        messages.info(request, 'Ya rechazaste este documento.')
+        return None, redirect('portal_document_detail', pk=document.id)
+    if document.status != Document.Status.PENDING:
+        messages.info(request, 'El documento ya no está disponible para firmar.')
+        return None, redirect('portal_document_detail', pk=document.id)
+    current_pending = _current_pending_signatory(document)
+    if not current_pending or current_pending.user_id != request.user.id:
+        pending_name = _display_user_name(current_pending.user) if current_pending else 'otro firmante'
+        messages.info(request, f'Aún no es tu turno de firma. Pendiente por: {pending_name}.')
+        return None, redirect('portal_document_detail', pk=document.id)
+    return signatory, None
+
+
+def _attempt_signature_capture_for_finalize(request, document):
+    """
+    Procesa el POST de firma: usa firma guardada si existe y es legible; si no, exige subida.
+    Devuelve (redirect_response|None, form|None). Si redirect_response, la vista debe retornarlo.
+    """
+    post = request.POST.copy()
+    user = request.user
+    if _user_has_usable_saved_signature(user):
+        post['signature_mode'] = SignatureCaptureForm.SignatureMode.SAVED
+        post.setdefault('signature_data', '')
+    else:
+        post['signature_mode'] = SignatureCaptureForm.SignatureMode.UPLOAD
+
+    form = SignatureCaptureForm(post, request.FILES, user=user)
+    if not form.is_valid():
+        return None, form
+
+    mode = form.cleaned_data['signature_mode']
+    if mode == SignatureCaptureForm.SignatureMode.SAVED:
+        try:
+            user.signature_image.open('rb')
+            signature_data = _file_to_data_url(user.signature_image, fallback_name='firma_guardada.png')
+            user.signature_image.close()
+        except FileNotFoundError:
+            messages.error(
+                request,
+                'Tu firma guardada no está disponible en almacenamiento. Sube una imagen de firma.',
+            )
+            return redirect('portal_sign_flow_review', pk=document.id), None
+    else:
+        uploaded = form.cleaned_data['signature_upload']
+        signature_data = _file_to_data_url(uploaded, fallback_name=uploaded.name)
+        user.signature_image = uploaded
+        user.save(update_fields=['signature_image'])
+
+    request.session['pending_signature_data'] = signature_data
+    return redirect('portal_sign_flow_finalize', pk=document.id), None
 
 
 @login_required
@@ -457,28 +535,77 @@ def document_signed_download(request, pk: int):
 
 
 @login_required
+def document_sign_preview_pdf(request, pk: int):
+    """PDF en memoria: original + hoja de firmas con la firma pendiente (sin persistir)."""
+    document = get_object_or_404(Document, pk=pk)
+    signatory, gate = _sign_flow_gate(request, document)
+    if gate:
+        return gate
+
+    pending = request.session.get('pending_signature_data')
+    if not pending:
+        return HttpResponse('No hay firma pendiente de confirmar.', status=400, content_type='text/plain; charset=utf-8')
+
+    try:
+        raw = build_signed_pdf_preview_bytes(document, request.user, pending)
+    except (FileNotFoundError, ValueError):
+        raise Http404('El PDF del documento no está disponible.')
+
+    buf = BytesIO(raw)
+    buf.seek(0)
+    return FileResponse(
+        buf,
+        content_type='application/pdf',
+        as_attachment=False,
+        filename=f'vista-previa-firmado-{pk}.pdf',
+    )
+
+
+@login_required
+@xframe_options_sameorigin
+def document_sign_preview_embed(request, pk: int):
+    document = get_object_or_404(Document, pk=pk)
+    signatory, gate = _sign_flow_gate(request, document)
+    if gate:
+        return gate
+
+    if not request.session.get('pending_signature_data'):
+        return render(
+            request,
+            'portal/pdf_embed_viewer.html',
+            {'error': 'no_session', 'pdf_fetch_url': '', 'document_title': document.title},
+        )
+
+    pdf_fetch_url = reverse('portal_document_sign_preview_pdf', args=[pk])
+    return render(
+        request,
+        'portal/pdf_embed_viewer.html',
+        {'pdf_fetch_url': pdf_fetch_url, 'document_title': document.title},
+    )
+
+
+@login_required
 def sign_flow_review(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
-    signatory = _signatory_for(request.user, document)
-    if not signatory:
-        return _forbidden_or_login(request, 'No eres firmante de este documento.')
-    if signatory.status == 'signed':
-        messages.info(request, 'Ya finalizaste tu firma en este documento.')
-        return redirect('portal_document_detail', pk=document.id)
-    if signatory.status == 'rejected':
-        messages.info(request, 'Ya rechazaste este documento.')
-        return redirect('portal_document_detail', pk=document.id)
-    if document.status != Document.Status.PENDING:
-        messages.info(request, 'El documento ya no está disponible para firmar.')
-        return redirect('portal_document_detail', pk=document.id)
-    current_pending = _current_pending_signatory(document)
-    if not current_pending or current_pending.user_id != request.user.id:
-        pending_name = _display_user_name(current_pending.user) if current_pending else 'otro firmante'
-        messages.info(request, f'Aún no es tu turno de firma. Pendiente por: {pending_name}.')
-        return redirect('portal_document_detail', pk=document.id)
+    signatory, gate = _sign_flow_gate(request, document)
+    if gate:
+        return gate
 
     if request.method == 'POST':
-        return redirect('portal_sign_flow_sign', pk=document.id)
+        redirect_resp, err_form = _attempt_signature_capture_for_finalize(request, document)
+        if redirect_resp:
+            return redirect_resp
+        return render(
+            request,
+            'portal/firma_paso1.html',
+            {
+                'document': document,
+                'signatory': signatory,
+                'form': err_form,
+                'has_saved_signature': _user_has_usable_saved_signature(request.user),
+                'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
+            },
+        )
 
     return render(
         request,
@@ -486,6 +613,9 @@ def sign_flow_review(request, pk: int):
         {
             'document': document,
             'signatory': signatory,
+            'form': None,
+            'has_saved_signature': _user_has_usable_saved_signature(request.user),
+            'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
         },
     )
 
@@ -493,61 +623,27 @@ def sign_flow_review(request, pk: int):
 @login_required
 def sign_flow_sign(request, pk: int):
     document = get_object_or_404(Document, pk=pk)
-    signatory = _signatory_for(request.user, document)
-    if not signatory:
-        return _forbidden_or_login(request, 'No eres firmante de este documento.')
-    if signatory.status == 'signed':
-        return redirect('portal_document_detail', pk=document.id)
-    if signatory.status == 'rejected':
-        messages.info(request, 'No puedes firmar un documento que ya rechazaste.')
-        return redirect('portal_document_detail', pk=document.id)
-    if document.status != Document.Status.PENDING:
-        messages.info(request, 'El documento ya no está disponible para firmar.')
-        return redirect('portal_document_detail', pk=document.id)
-    current_pending = _current_pending_signatory(document)
-    if not current_pending or current_pending.user_id != request.user.id:
-        pending_name = _display_user_name(current_pending.user) if current_pending else 'otro firmante'
-        messages.info(request, f'Aún no es tu turno de firma. Pendiente por: {pending_name}.')
-        return redirect('portal_document_detail', pk=document.id)
+    signatory, gate = _sign_flow_gate(request, document)
+    if gate:
+        return gate
 
-    form = SignatureCaptureForm(request.POST or None, request.FILES or None, user=request.user)
-    if request.method == 'POST' and form.is_valid():
-        mode = form.cleaned_data['signature_mode']
+    if request.method == 'POST':
+        redirect_resp, err_form = _attempt_signature_capture_for_finalize(request, document)
+        if redirect_resp:
+            return redirect_resp
+        return render(
+            request,
+            'portal/firma_paso1.html',
+            {
+                'document': document,
+                'signatory': signatory,
+                'form': err_form,
+                'has_saved_signature': _user_has_usable_saved_signature(request.user),
+                'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
+            },
+        )
 
-        if mode == SignatureCaptureForm.SignatureMode.DRAW:
-            signature_data = form.cleaned_data['signature_data']
-        elif mode == SignatureCaptureForm.SignatureMode.SAVED:
-            try:
-                request.user.signature_image.open('rb')
-                signature_data = _file_to_data_url(request.user.signature_image, fallback_name='firma_guardada.png')
-                request.user.signature_image.close()
-            except FileNotFoundError:
-                messages.error(
-                    request,
-                    'Tu firma guardada no está disponible en almacenamiento. Por favor dibuja o sube una firma nueva.',
-                )
-                return redirect('portal_sign_flow_sign', pk=document.id)
-        else:
-            uploaded = form.cleaned_data['signature_upload']
-            signature_data = _file_to_data_url(uploaded, fallback_name=uploaded.name)
-            # Guarda la firma subida para siguientes firmas del usuario
-            request.user.signature_image = uploaded
-            request.user.save(update_fields=['signature_image'])
-
-        request.session['pending_signature_data'] = signature_data
-        return redirect('portal_sign_flow_finalize', pk=document.id)
-
-    return render(
-        request,
-        'portal/firma_paso2.html',
-        {
-            'document': document,
-            'signatory': signatory,
-            'form': form,
-            'has_saved_signature': bool(request.user.signature_image),
-            'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
-        },
-    )
+    return redirect('portal_sign_flow_review', pk=document.id)
 
 
 @login_required
@@ -572,7 +668,7 @@ def sign_flow_finalize(request, pk: int):
 
     signature_data = request.session.get('pending_signature_data')
     if not signature_data:
-        return redirect('portal_sign_flow_sign', pk=document.id)
+        return redirect('portal_sign_flow_review', pk=document.id)
 
     if request.method == 'POST':
         with transaction.atomic():
@@ -606,7 +702,6 @@ def sign_flow_finalize(request, pk: int):
         {
             'document': document,
             'signatory': signatory,
-            'signature_preview': signature_data,
         },
     )
 
