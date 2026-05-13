@@ -140,6 +140,17 @@ class SignatureCaptureForm(forms.Form):
     signature_mode = forms.ChoiceField(choices=SignatureMode.choices)
     signature_data = forms.CharField(required=False)
     signature_upload = forms.ImageField(required=False)
+    signer_note = forms.CharField(
+        label='Nota (opcional)',
+        required=False,
+        max_length=4000,
+        widget=forms.Textarea(
+            attrs={
+                'rows': 4,
+                'placeholder': 'Observaciones o aclaraciones sobre tu firma en este documento…',
+            }
+        ),
+    )
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
@@ -171,6 +182,10 @@ class SignatureCaptureForm(forms.Form):
                     'signature_upload',
                     'Tipo de archivo no válido. Usa JPG, JPEG, PNG, WEBP, GIF o BMP.',
                 )
+
+        note = cleaned_data.get('signer_note')
+        if note is not None:
+            cleaned_data['signer_note'] = note.strip()
 
         return cleaned_data
 

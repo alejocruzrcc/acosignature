@@ -1,12 +1,24 @@
 {% extends "base_portal.html" %}
 {% block title %}Confirmar · {{ document.title }}{% endblock %}
+{% block extra_head %}
+  <style>
+    .pdf-embed-wrap iframe.pdf{
+      width: 100%;
+      min-height: min(56vh, 520px);
+      height: min(56vh, 520px);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+  </style>
+{% endblock %}
 {% block content %}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end">
     <div>
       <div class="h2">Paso 2 de 2</div>
       <h1 class="h1">Confirmación</h1>
       <p style="margin:0;color:var(--muted);line-height:1.6">
-        Revisa cómo quedará el PDF firmado (documento y hoja de firmas). Al confirmar, se registrará tu firma y se actualizará el estado del documento.
+        Revisa cómo quedará el PDF firmado: documento original, notas de firmantes (si las hay) y hoja de firmas con tu firma pendiente. Al confirmar, se registrará tu firma y se actualizará el estado del documento.
       </p>
     </div>
     <a class="btn btn-ghost" href="{% url 'portal_sign_flow_review' document.id %}">Atrás</a>
@@ -19,7 +31,7 @@
     {% url 'portal_document_sign_preview_embed' document.id as preview_embed_url %}
 
     <p style="margin:0 0 10px;color:var(--muted);line-height:1.6;font-size:13px">
-      Incluye el PDF original y la hoja de firmas con tu firma pendiente. Si el visor no carga bien, abre el archivo en una pestaña nueva.
+      Orden del PDF: páginas del documento, sección de notas (cuando existan) y hoja de firmas. Si el visor no carga bien, abre el archivo en una pestaña nueva.
     </p>
 
     <div class="pdf-embed-wrap">

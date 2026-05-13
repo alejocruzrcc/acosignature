@@ -8,6 +8,7 @@ class Signature(models.Model):
     signed_at = models.DateTimeField(auto_now_add=True)
     ip_address = models.GenericIPAddressField(blank=True, null=True)
     signature_data = models.TextField()
+    signer_note = models.TextField(blank=True, default='')
     is_valid = models.BooleanField(default=True)
 
     class Meta:

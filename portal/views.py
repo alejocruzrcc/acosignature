@@ -228,6 +228,7 @@ def _attempt_signature_capture_for_finalize(request, document):
         user.save(update_fields=['signature_image'])
 
     request.session['pending_signature_data'] = signature_data
+    request.session['pending_signer_note'] = form.cleaned_data.get('signer_note') or ''
     return redirect('portal_sign_flow_finalize', pk=document.id), None
 
 
@@ -536,7 +537,7 @@ def document_signed_download(request, pk: int):
 
 @login_required
 def document_sign_preview_pdf(request, pk: int):
-    """PDF en memoria: original + hoja de firmas con la firma pendiente (sin persistir)."""
+    """PDF en memoria: original + notas + firmas con la firma pendiente (sin persistir)."""
     document = get_object_or_404(Document, pk=pk)
     signatory, gate = _sign_flow_gate(request, document)
     if gate:
@@ -547,7 +548,12 @@ def document_sign_preview_pdf(request, pk: int):
         return HttpResponse('No hay firma pendiente de confirmar.', status=400, content_type='text/plain; charset=utf-8')
 
     try:
-        raw = build_signed_pdf_preview_bytes(document, request.user, pending)
+        raw = build_signed_pdf_preview_bytes(
+            document,
+            request.user,
+            pending,
+            pending_signer_note=request.session.get('pending_signer_note', ''),
+        )
     except (FileNotFoundError, ValueError):
         raise Http404('El PDF del documento no está disponible.')
 
@@ -613,7 +619,10 @@ def sign_flow_review(request, pk: int):
         {
             'document': document,
             'signatory': signatory,
-            'form': None,
+            'form': SignatureCaptureForm(
+                user=request.user,
+                initial={'signer_note': request.session.get('pending_signer_note', '')},
+            ),
             'has_saved_signature': _user_has_usable_saved_signature(request.user),
             'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
         },
@@ -677,6 +686,7 @@ def sign_flow_finalize(request, pk: int):
                 user=request.user,
                 defaults={
                     'signature_data': signature_data,
+                    'signer_note': (request.session.get('pending_signer_note') or '').strip(),
                     'ip_address': request.META.get('REMOTE_ADDR'),
                     'is_valid': True,
                 },
@@ -693,8 +703,9 @@ def sign_flow_finalize(request, pk: int):
                 return redirect('portal_document_detail', pk=document.id)
 
         request.session.pop('pending_signature_data', None)
+        request.session.pop('pending_signer_note', None)
         messages.success(request, 'Firma registrada.')
-        return redirect('portal_document_detail', pk=document.id)
+        return redirect('portal_approvals_index')
 
     return render(
         request,

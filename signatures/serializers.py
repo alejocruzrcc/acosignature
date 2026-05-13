@@ -9,9 +9,11 @@ from .models import Signature
 class SignatureSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
 
+    signer_note = serializers.CharField(required=False, allow_blank=True, max_length=4000)
+
     class Meta:
         model = Signature
-        fields = ('id', 'document', 'user', 'signed_at', 'ip_address', 'signature_data', 'is_valid')
+        fields = ('id', 'document', 'user', 'signed_at', 'ip_address', 'signature_data', 'signer_note', 'is_valid')
         read_only_fields = ('id', 'user', 'signed_at', 'ip_address', 'is_valid')
 
     def validate_document(self, value):
@@ -23,11 +25,13 @@ class SignatureSerializer(serializers.ModelSerializer):
         request = self.context['request']
         client_ip = self._get_ip(request)
         document = validated_data['document']
+        note = (validated_data.get('signer_note') or '').strip()
         signature, _created = Signature.objects.update_or_create(
             document=document,
             user=request.user,
             defaults={
                 'signature_data': validated_data['signature_data'],
+                'signer_note': note,
                 'ip_address': client_ip,
                 'is_valid': True,
             },

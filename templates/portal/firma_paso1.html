@@ -62,6 +62,16 @@
     .sign-block{
       margin-top: 14px;
     }
+    .sign-flow-note textarea{
+      width: 100%;
+      min-height: 96px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      font: inherit;
+      resize: vertical;
+      box-sizing: border-box;
+    }
   </style>
 {% endblock %}
 
@@ -77,60 +87,70 @@
     <a class="btn btn-ghost" href="{% url 'portal_document_detail' document.id %}">Cancelar</a>
   </div>
 
-  <section class="grid grid-2" style="margin-top:14px">
-    <div class="card">
-      <div class="h2">Resumen</div>
-      <div class="field"><label>Título</label><div style="font-weight:900">{{ document.title }}</div></div>
-      <div class="field"><label>Descripción</label><div style="white-space:pre-wrap;line-height:1.6">{{ document.description|default:"—" }}</div></div>
-      <div class="field"><label>Tu rol</label><div>Firmante asignado</div></div>
-    </div>
+  <form method="post" enctype="multipart/form-data" id="sign-flow-form" style="margin-top:14px">
+    {% csrf_token %}
 
-    <div class="card">
-      <div class="h2">Vista previa (PDF)</div>
-
-      {% url 'portal_document_pdf' document.id as pdf_url %}
-      {% url 'portal_document_pdf_embed' document.id as embed_url %}
-
-      <p style="margin:0 0 10px;color:var(--muted);line-height:1.6;font-size:13px">
-        El visor funciona en móvil y escritorio. Si prefieres el lector del sistema, abre en nueva pestaña.
-      </p>
-
-      <div class="pdf-embed-wrap">
-        <iframe class="pdf" title="Vista previa del documento" src="{{ embed_url }}"></iframe>
+    {% if form.non_field_errors %}
+      <div class="message" style="border-left-color:#ef4444;background:#fff5f5;margin-bottom:12px">
+        {{ form.non_field_errors }}
       </div>
+    {% endif %}
 
-      <p class="footer-note" style="margin-top:10px">
-        También puedes <a href="{{ pdf_url }}" target="_blank" rel="noopener">abrir el PDF en una pestaña nueva</a>.
-      </p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-primary" type="button" id="open-pdf-modal">Pantalla completa</button>
-        <a class="btn btn-ghost" href="{{ pdf_url }}" target="_blank" rel="noopener">Abrir en nueva pestaña</a>
-      </div>
-    </div>
-  </section>
+    <section class="grid grid-2">
+      <div class="card">
+        <div class="h2">Resumen</div>
+        <div class="field"><label>Título</label><div style="font-weight:900">{{ document.title }}</div></div>
+        <div class="field"><label>Descripción</label><div style="white-space:pre-wrap;line-height:1.6">{{ document.description|default:"—" }}</div></div>
+        <div class="field"><label>Tu rol</label><div>Firmante asignado</div></div>
 
-  <div class="pdf-modal" id="pdf-modal" aria-hidden="true">
-    <div class="pdf-modal-card">
-      <div class="pdf-modal-head">
-        <strong>Documento a firmar</strong>
-        <button class="btn btn-ghost" type="button" id="close-pdf-modal">Cerrar</button>
-      </div>
-      <div class="pdf-modal-body">
-        <iframe class="pdf" title="Documento a firmar" src="{{ embed_url }}"></iframe>
-      </div>
-    </div>
-  </div>
-
-  <section class="card sign-block">
-    <div class="h2">Firma</div>
-    <form method="post" enctype="multipart/form-data" id="sign-flow-form">
-      {% csrf_token %}
-
-      {% if form and form.non_field_errors %}
-        <div class="message" style="border-left-color:#ef4444;background:#fff5f5;margin-bottom:12px">
-          {{ form.non_field_errors }}
+        <div class="field sign-flow-note" style="margin-top:4px">
+          <label for="{{ form.signer_note.id_for_label }}">{{ form.signer_note.label }}</label>
+          {{ form.signer_note }}
+          <div class="help">Opcional. Se incluirá en el PDF firmado antes de la hoja de firmas.</div>
+          {% if form.signer_note.errors %}
+            <div class="help" style="color:#b91c1c">{{ form.signer_note.errors|join:", " }}</div>
+          {% endif %}
         </div>
-      {% endif %}
+      </div>
+
+      <div class="card">
+        <div class="h2">Vista previa (PDF)</div>
+
+        {% url 'portal_document_pdf' document.id as pdf_url %}
+        {% url 'portal_document_pdf_embed' document.id as embed_url %}
+
+        <p style="margin:0 0 10px;color:var(--muted);line-height:1.6;font-size:13px">
+          El visor funciona en móvil y escritorio. Si prefieres el lector del sistema, abre en nueva pestaña.
+        </p>
+
+        <div class="pdf-embed-wrap">
+          <iframe class="pdf" title="Vista previa del documento" src="{{ embed_url }}"></iframe>
+        </div>
+
+        <p class="footer-note" style="margin-top:10px">
+          También puedes <a href="{{ pdf_url }}" target="_blank" rel="noopener">abrir el PDF en una pestaña nueva</a>.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn btn-primary" type="button" id="open-pdf-modal">Pantalla completa</button>
+          <a class="btn btn-ghost" href="{{ pdf_url }}" target="_blank" rel="noopener">Abrir en nueva pestaña</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="pdf-modal" id="pdf-modal" aria-hidden="true">
+      <div class="pdf-modal-card">
+        <div class="pdf-modal-head">
+          <strong>Documento a firmar</strong>
+          <button class="btn btn-ghost" type="button" id="close-pdf-modal">Cerrar</button>
+        </div>
+        <div class="pdf-modal-body">
+          <iframe class="pdf" title="Documento a firmar" src="{{ embed_url }}"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <section class="card sign-block">
+      <div class="h2">Firma</div>
 
       {% if has_saved_signature %}
         <p style="margin:0 0 10px;color:var(--muted);line-height:1.6">
@@ -147,22 +167,22 @@
           <label for="id_signature_upload">Imagen de firma</label>
           <input type="file" name="signature_upload" id="id_signature_upload" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,image/jpeg,image/png,image/webp,image/gif,image/bmp" />
           <div class="help">Formatos permitidos: JPG, JPEG, PNG, WEBP, GIF y BMP.</div>
-          {% if form and form.signature_upload.errors %}
+          {% if form.signature_upload.errors %}
             <div class="help" style="color:#b91c1c">{{ form.signature_upload.errors|join:", " }}</div>
           {% endif %}
         </div>
       {% endif %}
 
-      {% if form and form.signature_mode.errors %}
+      {% if form.signature_mode.errors %}
         <div class="help" style="color:#b91c1c;margin-top:8px">{{ form.signature_mode.errors|join:", " }}</div>
       {% endif %}
 
       <button class="btn btn-primary btn-block" type="submit" style="margin-top:14px">Firmar</button>
       <p class="footer-note" style="margin-top:10px;margin-bottom:0">
-        El siguiente paso solo confirma la firma antes de registrarla en el documento.
+        El siguiente paso muestra el PDF con tu nota (si la escribiste), la firma pendiente y la hoja de firmas.
       </p>
-    </form>
-  </section>
+    </section>
+  </form>
 
   <script>
     (function () {
