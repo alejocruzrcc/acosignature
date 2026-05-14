@@ -3,12 +3,21 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import include, path
+from django.views.generic import RedirectView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from accounts.views import CurrentUserView, CustomTokenObtainPairView
 from portal import views as portal_views
 
+_favicon_target = f'{settings.STATIC_URL}portal/brand-logo.png'
+
 urlpatterns = [
+    path('favicon.ico', RedirectView.as_view(url=_favicon_target, permanent=False)),
+    path('apple-touch-icon.png', RedirectView.as_view(url=_favicon_target, permanent=False)),
+    path(
+        'apple-touch-icon-precomposed.png',
+        RedirectView.as_view(url=_favicon_target, permanent=False),
+    ),
     path('', portal_views.home, name='portal_home'),
     path(
         'login/',

@@ -60,10 +60,16 @@ DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 
 if DATABASE_URL:
     # Neon/Render: preferir pegar el connection string completo (incluye sslmode, pooler, etc.)
+    # Reutilizar conexiones reduce latencia (TLS + handshake en cada request con 0).
+    _db_conn_max_age_raw = os.getenv('DB_CONN_MAX_AGE', '120').strip()
+    try:
+        _db_conn_max_age = int(_db_conn_max_age_raw)
+    except ValueError:
+        _db_conn_max_age = 120
     DATABASES = {
         'default': dj_database_url.parse(
             DATABASE_URL,
-            conn_max_age=int(os.getenv('DB_CONN_MAX_AGE', '0')),
+            conn_max_age=_db_conn_max_age,
         )
     }
 else:
