@@ -34,6 +34,12 @@
       box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
       border-radius: 4px;
     }
+    .page-placeholder {
+      width: min(100%, 960px);
+      min-height: 120px;
+      background: #e2e8f0;
+      border-radius: 4px;
+    }
     .msg { padding: 24px 16px; text-align: center; line-height: 1.5; }
     .msg.err { color: #b91c1c; }
   </style>
@@ -52,25 +58,24 @@
       var pdfUrl = '{{ pdf_fetch_url|escapejs }}';
       var statusEl = document.getElementById('pdf-status');
       var pagesEl = document.getElementById('pdf-pages');
-      if (!pdfUrl || typeof pdfjsLib === 'undefined') {
-        if (statusEl) {
-          statusEl.textContent = 'No se pudo iniciar el visor PDF.';
-          statusEl.className = 'top err';
+      var INITIAL_PAGES = 2;
+
+      function start() {
+        if (!pdfUrl || typeof pdfjsLib === 'undefined') {
+          if (statusEl) {
+            statusEl.textContent = 'No se pudo iniciar el visor PDF.';
+            statusEl.className = 'top err';
+          }
+          return;
         }
-        return;
-      }
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-      function maxCanvasWidth() {
-        return Math.min(window.innerWidth - 24, 960);
-      }
+        function maxCanvasWidth() {
+          return Math.min(window.innerWidth - 24, 960);
+        }
 
-      function renderAllPages(pdf) {
-        var maxW = maxCanvasWidth();
-        statusEl.textContent = 'Renderizando ' + pdf.numPages + ' página(s)…';
-
-        function renderPage(num) {
+        function renderPage(pdf, num, maxW) {
           return pdf.getPage(num).then(function (page) {
             var base = page.getViewport({ scale: 1 });
             var scale = maxW / base.width;
@@ -81,7 +86,12 @@
             canvas.height = Math.floor(viewport.height);
             canvas.style.width = Math.floor(viewport.width) + 'px';
             canvas.style.height = Math.floor(viewport.height) + 'px';
-            pagesEl.appendChild(canvas);
+            var slot = pagesEl.children[num - 1];
+            if (slot) {
+              slot.replaceWith(canvas);
+            } else {
+              pagesEl.appendChild(canvas);
+            }
             return page.render({
               canvasContext: ctx,
               viewport: viewport,
@@ -89,30 +99,65 @@
           });
         }
 
-        var seq = Promise.resolve();
-        for (var i = 1; i <= pdf.numPages; i++) {
-          (function (n) {
-            seq = seq.then(function () {
-              return renderPage(n);
+        function renderAllPages(pdf) {
+          var maxW = maxCanvasWidth();
+          var total = pdf.numPages;
+          for (var p = 1; p <= total; p++) {
+            var ph = document.createElement('div');
+            ph.className = 'page-placeholder';
+            ph.setAttribute('aria-hidden', 'true');
+            pagesEl.appendChild(ph);
+          }
+
+          var firstBatch = Math.min(INITIAL_PAGES, total);
+          statusEl.textContent = 'Mostrando primeras ' + firstBatch + ' de ' + total + ' página(s)…';
+
+          var seq = Promise.resolve();
+          for (var i = 1; i <= firstBatch; i++) {
+            (function (n) {
+              seq = seq.then(function () {
+                return renderPage(pdf, n, maxW);
+              });
+            })(i);
+          }
+          seq = seq.then(function () {
+            if (total <= firstBatch) {
+              statusEl.textContent = 'Listo · ' + total + ' página(s)';
+              return;
+            }
+            statusEl.textContent = 'Cargando páginas restantes…';
+            for (var j = firstBatch + 1; j <= total; j++) {
+              (function (n) {
+                seq = seq.then(function () {
+                  return renderPage(pdf, n, maxW);
+                });
+              })(j);
+            }
+            return seq.then(function () {
+              statusEl.textContent = 'Listo · ' + total + ' página(s)';
             });
-          })(i);
+          });
+          return seq;
         }
-        return seq.then(function () {
-          statusEl.textContent = 'Listo · ' + pdf.numPages + ' página(s)';
-        });
+
+        pdfjsLib
+          .getDocument({ url: pdfUrl, withCredentials: true })
+          .promise.then(function (pdf) {
+            return renderAllPages(pdf);
+          })
+          .catch(function () {
+            statusEl.textContent = 'No se pudo cargar el PDF';
+            statusEl.className = 'top err';
+            pagesEl.innerHTML =
+              '<p class="msg err">Si estás en el móvil, prueba también “Abrir en nueva pestaña” desde la página del documento.</p>';
+          });
       }
 
-      pdfjsLib
-        .getDocument({ url: pdfUrl, withCredentials: true })
-        .promise.then(function (pdf) {
-          return renderAllPages(pdf);
-        })
-        .catch(function () {
-          statusEl.textContent = 'No se pudo cargar el PDF';
-          statusEl.className = 'top err';
-          pagesEl.innerHTML =
-            '<p class="msg err">Si estás en el móvil, prueba también “Abrir en nueva pestaña” desde la página del documento.</p>';
-        });
+      if (typeof pdfjsLib !== 'undefined') {
+        start();
+      } else {
+        window.addEventListener('load', start);
+      }
     })();
   </script>
 {% endif %}

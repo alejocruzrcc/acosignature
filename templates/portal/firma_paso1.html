@@ -144,7 +144,12 @@
           <button class="btn btn-ghost" type="button" id="close-pdf-modal">Cerrar</button>
         </div>
         <div class="pdf-modal-body">
-          <iframe class="pdf" title="Documento a firmar" src="{{ embed_url }}"></iframe>
+          <iframe
+            id="pdf-modal-iframe"
+            class="pdf"
+            title="Documento a firmar"
+            data-embed-url="{{ embed_url }}"
+          ></iframe>
         </div>
       </div>
     </div>
@@ -192,7 +197,13 @@
 
       if (!modal) return;
 
+      const modalIframe = document.getElementById('pdf-modal-iframe');
+      const modalEmbedUrl = modalIframe && modalIframe.getAttribute('data-embed-url');
+
       function openModal() {
+        if (modalIframe && modalEmbedUrl && !modalIframe.getAttribute('src')) {
+          modalIframe.setAttribute('src', modalEmbedUrl);
+        }
         modal.classList.add('is-open');
         modal.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';

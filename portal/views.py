@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import math
 import mimetypes
 from urllib.parse import quote, urlencode
@@ -8,13 +9,14 @@ from urllib.parse import quote, urlencode
 from io import BytesIO
 
 from django.contrib import messages
+from django.core.cache import cache
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Exists, OuterRef
-from django.http import FileResponse, Http404, HttpResponseForbidden
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -27,6 +29,19 @@ from signatures.models import Signature
 from workflows.services import WorkflowService
 
 from .forms import DocumentCreateForm, DocumentEditForm, RejectionReasonForm, SignatureCaptureForm, UserProfileForm
+from .signatory_utils import (
+    approval_list_queryset,
+    current_pending_signatory,
+    document_detail_queryset,
+    is_fully_signed,
+    queryset_pending_signature_for_user,
+    rejected_signatory,
+    signatories_list,
+    signatory_for_user,
+    user_can_access_document,
+)
+
+_SIGN_PREVIEW_CACHE_SECONDS = 900
 
 
 def home(request):
@@ -34,9 +49,7 @@ def home(request):
 
 
 def _can_access_document(user, document: Document):
-    if user.role in {user.Roles.ADMIN, user.Roles.REVIEWER}:
-        return True
-    return document.signatories.filter(user=user).exists()
+    return user_can_access_document(user, document)
 
 
 def _forbidden_or_login(request, message: str):
@@ -83,7 +96,7 @@ def my_profile(request):
 
 
 def _signatory_for(user, document: Document):
-    return document.signatories.filter(user=user).first()
+    return signatory_for_user(document, user)
 
 
 def _display_user_name(user):
@@ -92,19 +105,57 @@ def _display_user_name(user):
 
 
 def _current_pending_signatory(document: Document):
-    return document.signatories.filter(status='pending').select_related('user').order_by('sign_order', 'id').first()
+    return current_pending_signatory(document)
 
 
 def _is_fully_signed(document: Document) -> bool:
-    signatories = list(document.signatories.all())
-    return bool(signatories) and all(s.status == DocumentSignatory.Status.SIGNED for s in signatories)
+    return is_fully_signed(document)
+
+
+def _sign_preview_cache_key(user_id: int, document_id: int, signature_data: str, signer_note: str) -> str:
+    digest = hashlib.sha256(
+        f'{user_id}:{document_id}:{signature_data}:{signer_note}'.encode('utf-8')
+    ).hexdigest()[:32]
+    return f'sign_preview:{digest}'
+
+
+def _store_sign_preview_in_cache(request, document: Document, signature_data: str, signer_note: str) -> None:
+    old_key = request.session.pop('pending_preview_cache_key', None)
+    if old_key:
+        cache.delete(old_key)
+    try:
+        raw = build_signed_pdf_preview_bytes(
+            document,
+            request.user,
+            signature_data,
+            pending_signer_note=signer_note,
+        )
+    except (FileNotFoundError, ValueError):
+        return
+    cache_key = _sign_preview_cache_key(request.user.id, document.id, signature_data, signer_note)
+    cache.set(cache_key, raw, timeout=_SIGN_PREVIEW_CACHE_SECONDS)
+    request.session['pending_preview_cache_key'] = cache_key
+
+
+def _get_cached_sign_preview(request) -> bytes | None:
+    cache_key = request.session.get('pending_preview_cache_key')
+    if not cache_key:
+        return None
+    raw = cache.get(cache_key)
+    return raw if raw else None
+
+
+def _clear_sign_preview_cache(request) -> None:
+    cache_key = request.session.pop('pending_preview_cache_key', None)
+    if cache_key:
+        cache.delete(cache_key)
 
 
 def _build_approval_row(user, document: Document) -> dict:
-    signatories = list(document.signatories.all())
+    signatories = signatories_list(document)
     my_sig = next((s for s in signatories if s.user_id == user.id), None)
-    current_pending = document.current_pending_signatory()
-    rejected_signatory = document.rejected_signatory()
+    current_pending = current_pending_signatory(document)
+    rejected = rejected_signatory(document)
     fully_signed = bool(signatories) and all(s.status == DocumentSignatory.Status.SIGNED for s in signatories)
     is_my_turn = bool(
         document.status == Document.Status.PENDING
@@ -124,7 +175,7 @@ def _build_approval_row(user, document: Document) -> dict:
             and not is_my_turn
             and document.status == Document.Status.PENDING
         ),
-        'rejected_by': _display_user_name(rejected_signatory.user) if rejected_signatory else '',
+        'rejected_by': _display_user_name(rejected.user) if rejected else '',
         'can_delete': not fully_signed,
         'delete_block_reason': 'No se puede eliminar un documento ya firmado por todos.' if fully_signed else '',
     }
@@ -227,8 +278,10 @@ def _attempt_signature_capture_for_finalize(request, document):
         user.signature_image = uploaded
         user.save(update_fields=['signature_image'])
 
+    signer_note = form.cleaned_data.get('signer_note') or ''
     request.session['pending_signature_data'] = signature_data
-    request.session['pending_signer_note'] = form.cleaned_data.get('signer_note') or ''
+    request.session['pending_signer_note'] = signer_note
+    _store_sign_preview_in_cache(request, document, signature_data, signer_note)
     return redirect('portal_sign_flow_finalize', pk=document.id), None
 
 
@@ -242,30 +295,22 @@ def approvals_index(request):
 
     query = (request.GET.get('q') or '').strip()
 
-    documents = (
-        Document.objects.select_related('uploaded_by')
-        .prefetch_related('signatories__user', 'signatures__user')
-        .filter(archived_at__isnull=True)
+    documents = approval_list_queryset(
+        request.user,
+        category=selected_category,
+        query=query,
     )
-    if selected_category:
-        documents = documents.filter(category=selected_category)
-    if query:
-        documents = documents.filter(title__icontains=query)
-    if request.user.role == request.user.Roles.CLIENT:
-        documents = documents.filter(signatories__user=request.user).distinct()
-    documents = documents.order_by('-created_at')
 
-    all_rows = []
-    pending_for_me = []
-    for d in documents:
-        row = _build_approval_row(request.user, d)
-        all_rows.append(row)
-        if row['needs_my_signature'] and d.status == Document.Status.PENDING:
-            pending_for_me.append(row)
-
-    paginator = Paginator(all_rows, 10)
+    paginator = Paginator(documents, 10)
     page_obj = paginator.get_page(request.GET.get('page', 1))
-    rows = list(page_obj.object_list)
+    rows = [_build_approval_row(request.user, d) for d in page_obj.object_list]
+
+    pending_docs = queryset_pending_signature_for_user(
+        request.user,
+        category=selected_category,
+        query=query,
+    )[:25]
+    pending_for_me = [_build_approval_row(request.user, d) for d in pending_docs]
     pagination_query = urlencode(
         {k: v for k, v in {'categoria': selected_category, 'q': query}.items() if v}
     )
@@ -322,7 +367,7 @@ def archived_documents_index(request):
 @login_required
 @require_POST
 def document_archive(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _get_document_for_access(pk)
     if not _can_access_document(request.user, document):
         return _forbidden_or_login(request, 'No tienes acceso a este documento.')
 
@@ -348,7 +393,7 @@ def document_archive(request, pk: int):
 @login_required
 @require_POST
 def document_delete(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _get_document_for_access(pk)
     if not _can_access_document(request.user, document):
         return _forbidden_or_login(request, 'No tienes acceso a este documento.')
     back_to_archived = '/aprobaciones/archivados/' in (request.META.get('HTTP_REFERER') or '')
@@ -394,7 +439,7 @@ def document_create(request):
 
 @login_required
 def document_edit(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = get_object_or_404(document_detail_queryset(), pk=pk)
     if document.uploaded_by_id != request.user.id:
         return _forbidden_or_login(request, 'Solo el creador puede editar este documento.')
 
@@ -433,18 +478,14 @@ def document_edit(request, pk: int):
 
 @login_required
 def document_detail(request, pk: int):
-    document = get_object_or_404(
-        Document.objects.select_related('uploaded_by')
-        .prefetch_related('signatories__user', 'signatures__user'),
-        pk=pk,
-    )
+    document = get_object_or_404(document_detail_queryset(), pk=pk)
 
     if not _can_access_document(request.user, document):
         return _forbidden_or_login(request, 'No tienes acceso a este documento.')
 
     my_signatory = _signatory_for(request.user, document)
     current_pending = _current_pending_signatory(document)
-    rejected_signatory = document.rejected_signatory()
+    rejected = rejected_signatory(document)
     is_my_turn = bool(
         document.status == Document.Status.PENDING
         and my_signatory
@@ -460,14 +501,21 @@ def document_detail(request, pk: int):
             'my_signatory': my_signatory,
             'is_my_turn': is_my_turn,
             'current_pending_signatory': current_pending,
-            'rejected_signatory': rejected_signatory,
+            'rejected_signatory': rejected,
         },
+    )
+
+
+def _get_document_for_access(pk: int):
+    return get_object_or_404(
+        Document.objects.prefetch_related('signatories'),
+        pk=pk,
     )
 
 
 @login_required
 def document_pdf(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _get_document_for_access(pk)
     if not _can_access_document(request.user, document):
         return _forbidden_or_login(request, 'No tienes acceso a este documento.')
 
@@ -498,7 +546,7 @@ def document_pdf_embed(request, pk: int):
     Página HTML que renderiza el PDF con PDF.js (canvas).
     Sirve para vista previa en móviles y dentro de iframes, donde el PDF nativo suele fallar.
     """
-    document = get_object_or_404(Document, pk=pk)
+    document = _get_document_for_access(pk)
     if not _can_access_document(request.user, document):
         return _forbidden_or_login(request, 'No tienes acceso a este documento.')
 
@@ -520,7 +568,7 @@ def document_pdf_embed(request, pk: int):
 
 @login_required
 def document_signed_download(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _get_document_for_access(pk)
     if not _can_access_document(request.user, document):
         return _forbidden_or_login(request, 'No tienes acceso a este documento.')
 
@@ -538,7 +586,10 @@ def document_signed_download(request, pk: int):
 @login_required
 def document_sign_preview_pdf(request, pk: int):
     """PDF en memoria: original + notas + firmas con la firma pendiente (sin persistir)."""
-    document = get_object_or_404(Document, pk=pk)
+    document = get_object_or_404(
+        document_detail_queryset().prefetch_related('signatures__user'),
+        pk=pk,
+    )
     signatory, gate = _sign_flow_gate(request, document)
     if gate:
         return gate
@@ -547,15 +598,17 @@ def document_sign_preview_pdf(request, pk: int):
     if not pending:
         return HttpResponse('No hay firma pendiente de confirmar.', status=400, content_type='text/plain; charset=utf-8')
 
-    try:
-        raw = build_signed_pdf_preview_bytes(
-            document,
-            request.user,
-            pending,
-            pending_signer_note=request.session.get('pending_signer_note', ''),
-        )
-    except (FileNotFoundError, ValueError):
-        raise Http404('El PDF del documento no está disponible.')
+    raw = _get_cached_sign_preview(request)
+    if raw is None:
+        try:
+            raw = build_signed_pdf_preview_bytes(
+                document,
+                request.user,
+                pending,
+                pending_signer_note=request.session.get('pending_signer_note', ''),
+            )
+        except (FileNotFoundError, ValueError):
+            raise Http404('El PDF del documento no está disponible.')
 
     buf = BytesIO(raw)
     buf.seek(0)
@@ -570,7 +623,7 @@ def document_sign_preview_pdf(request, pk: int):
 @login_required
 @xframe_options_sameorigin
 def document_sign_preview_embed(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _sign_flow_document(pk)
     signatory, gate = _sign_flow_gate(request, document)
     if gate:
         return gate
@@ -591,11 +644,18 @@ def document_sign_preview_embed(request, pk: int):
 
 
 @login_required
+def _sign_flow_document(pk: int):
+    return get_object_or_404(document_detail_queryset(), pk=pk)
+
+
 def sign_flow_review(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _sign_flow_document(pk)
     signatory, gate = _sign_flow_gate(request, document)
     if gate:
         return gate
+
+    has_saved = _user_has_usable_saved_signature(request.user)
+    saved_url = request.user.signature_image.url if has_saved and request.user.signature_image else ''
 
     if request.method == 'POST':
         redirect_resp, err_form = _attempt_signature_capture_for_finalize(request, document)
@@ -608,8 +668,8 @@ def sign_flow_review(request, pk: int):
                 'document': document,
                 'signatory': signatory,
                 'form': err_form,
-                'has_saved_signature': _user_has_usable_saved_signature(request.user),
-                'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
+                'has_saved_signature': has_saved,
+                'saved_signature_url': saved_url,
             },
         )
 
@@ -623,15 +683,15 @@ def sign_flow_review(request, pk: int):
                 user=request.user,
                 initial={'signer_note': request.session.get('pending_signer_note', '')},
             ),
-            'has_saved_signature': _user_has_usable_saved_signature(request.user),
-            'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
+            'has_saved_signature': has_saved,
+            'saved_signature_url': saved_url,
         },
     )
 
 
 @login_required
 def sign_flow_sign(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _sign_flow_document(pk)
     signatory, gate = _sign_flow_gate(request, document)
     if gate:
         return gate
@@ -640,6 +700,7 @@ def sign_flow_sign(request, pk: int):
         redirect_resp, err_form = _attempt_signature_capture_for_finalize(request, document)
         if redirect_resp:
             return redirect_resp
+        has_saved = _user_has_usable_saved_signature(request.user)
         return render(
             request,
             'portal/firma_paso1.html',
@@ -647,8 +708,8 @@ def sign_flow_sign(request, pk: int):
                 'document': document,
                 'signatory': signatory,
                 'form': err_form,
-                'has_saved_signature': _user_has_usable_saved_signature(request.user),
-                'saved_signature_url': request.user.signature_image.url if request.user.signature_image else '',
+                'has_saved_signature': has_saved,
+                'saved_signature_url': request.user.signature_image.url if has_saved and request.user.signature_image else '',
             },
         )
 
@@ -657,7 +718,7 @@ def sign_flow_sign(request, pk: int):
 
 @login_required
 def sign_flow_finalize(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _sign_flow_document(pk)
     signatory = _signatory_for(request.user, document)
     if not signatory:
         return _forbidden_or_login(request, 'No eres firmante de este documento.')
@@ -704,6 +765,7 @@ def sign_flow_finalize(request, pk: int):
 
         request.session.pop('pending_signature_data', None)
         request.session.pop('pending_signer_note', None)
+        _clear_sign_preview_cache(request)
         messages.success(request, 'Firma registrada.')
         return redirect('portal_approvals_index')
 
@@ -722,7 +784,7 @@ def approve_entry(request, pk: int):
     """
     Punto de entrada desde el listado: manda al flujo de firma.
     """
-    document = get_object_or_404(Document, pk=pk)
+    document = _sign_flow_document(pk)
     signatory = _signatory_for(request.user, document)
     if not signatory:
         return _forbidden_or_login(request, 'No eres firmante de este documento.')
@@ -744,7 +806,7 @@ def approve_entry(request, pk: int):
 
 @login_required
 def reject_entry(request, pk: int):
-    document = get_object_or_404(Document, pk=pk)
+    document = _sign_flow_document(pk)
     signatory = _signatory_for(request.user, document)
     if not signatory:
         return _forbidden_or_login(request, 'No eres firmante de este documento.')

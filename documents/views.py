@@ -1,9 +1,12 @@
+from django.db.models import Exists, OuterRef
+
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
+from documents.models import DocumentSignatory
 from accounts.permissions import IsReviewerOrAdmin
 from workflows.services import WorkflowService
 
@@ -24,7 +27,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset().filter(archived_at__isnull=True)
         if user.role in {User.Roles.ADMIN, User.Roles.REVIEWER}:
             return qs
-        return qs.filter(signatories__user=user).distinct()
+        return qs.filter(
+            Exists(DocumentSignatory.objects.filter(document_id=OuterRef('pk'), user=user))
+        )
 
     def perform_create(self, serializer):
         serializer.save(uploaded_by=self.request.user, status=Document.Status.PENDING)
