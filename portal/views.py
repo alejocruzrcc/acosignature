@@ -643,11 +643,11 @@ def document_sign_preview_embed(request, pk: int):
     )
 
 
-@login_required
 def _sign_flow_document(pk: int):
     return get_object_or_404(document_detail_queryset(), pk=pk)
 
 
+@login_required
 def sign_flow_review(request, pk: int):
     document = _sign_flow_document(pk)
     signatory, gate = _sign_flow_gate(request, document)
